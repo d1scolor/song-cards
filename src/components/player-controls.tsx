@@ -3,7 +3,7 @@
 import {
   CirclePause,
   CirclePlay,
-  Octagon,
+  Square,
   Speaker,
   Volume1,
   Volume2
@@ -156,7 +156,11 @@ export function PlayerControls({
           disabled={busy || !status?.song}
           onClick={() => void action({ action: "stop" })}
         >
-          <Octagon size={compact ? 35 : 42} />
+          <Square
+            size={compact ? 22 : 28}
+            fill="currentColor"
+            strokeWidth={2.5}
+          />
         </button>
       </div>
 

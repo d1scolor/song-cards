@@ -186,6 +186,10 @@ h2,
   transform: none;
 }
 
+.camera-card.is-active .camera-preview {
+  transform: scaleX(-1);
+}
+
 .camera-preview {
   display: block;
   width: 100%;
@@ -1260,11 +1264,28 @@ form input::placeholder {
   }
 
   .player-panel--compact {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding-inline: 10px;
   }
 
   .player-panel--compact .transport-row {
-    display: none;
+    display: flex;
+    gap: 2px;
+  }
+
+  .player-panel--compact .now-playing {
+    gap: 10px;
+  }
+
+  .player-panel--compact .now-playing__art {
+    width: 44px;
+    height: 44px;
+    border-radius: 13px;
+  }
+
+  .player-panel--compact .round-control {
+    width: 44px;
+    height: 44px;
   }
 
   .admin-shell,

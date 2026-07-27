@@ -3,9 +3,14 @@
 import { Camera, CameraOff, Check, Music2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PlayerControls } from "@/components/player-controls";
+import type { PlayerStatus } from "@/lib/types";
 
 type ScanStage = "idle" | "opening" | "scanning" | "starting" | "success" | "error";
-type ScannedSong = { title: string; coverUrl: string | null };
+type ScannedSong = {
+  id: string | null;
+  title: string;
+  coverUrl: string | null;
+};
 
 export function Scanner() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -21,6 +26,25 @@ export function Scanner() {
   const [stage, setStage] = useState<ScanStage>("idle");
   const [message, setMessage] = useState("Pick a card and tap the button.");
   const [lastSong, setLastSong] = useState<ScannedSong | null>(null);
+
+  const syncPlayerSong = useCallback((status: PlayerStatus) => {
+    const song = status.song;
+    if (!song) return;
+    setLastSong((current) => {
+      if (
+        current?.id === song.id &&
+        current?.title === song.title &&
+        current?.coverUrl === song.coverUrl
+      ) {
+        return current;
+      }
+      return {
+        id: song.id,
+        title: song.title,
+        coverUrl: song.coverUrl
+      };
+    });
+  }, []);
 
   const stopCamera = useCallback(() => {
     if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
@@ -48,6 +72,7 @@ export function Scanner() {
         const body = await response.json();
         if (!response.ok) throw new Error(body.error || "That card did not work.");
         setLastSong({
+          id: body.song.id ?? null,
           title: body.song.title,
           coverUrl: body.song.coverUrl ?? null
         });
@@ -112,14 +137,36 @@ export function Scanner() {
         dictionaryName: "ARUCO_MIP_36h12",
         maxHammingDistance: 5
       });
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const frontCameraVideoConstraints: MediaTrackConstraints = {
+        facingMode: { exact: "user" },
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      };
+      const frontCameraConstraints: MediaStreamConstraints = {
         audio: false,
-        video: {
-          facingMode: { ideal: "environment" },
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
+        video: frontCameraVideoConstraints
+      };
+      let stream: MediaStream;
+      try {
+        stream =
+          await navigator.mediaDevices.getUserMedia(frontCameraConstraints);
+      } catch (error) {
+        if (
+          !(error instanceof DOMException) ||
+          error.name !== "OverconstrainedError"
+        ) {
+          throw error;
         }
-      });
+        // Desktop browsers do not always label their built-in camera as
+        // user-facing, so retain a preference without making it mandatory.
+        stream = await navigator.mediaDevices.getUserMedia({
+          ...frontCameraConstraints,
+          video: {
+            ...frontCameraVideoConstraints,
+            facingMode: { ideal: "user" }
+          }
+        });
+      }
       streamRef.current = stream;
       if (!videoRef.current) return;
       videoRef.current.srcObject = stream;
@@ -161,19 +208,17 @@ export function Scanner() {
             className="camera-preview"
             muted
             playsInline
-            aria-label="Camera preview"
+            aria-label="Front camera preview"
           />
           <canvas ref={canvasRef} hidden />
 
           {!scanning && (
             <div
               className={`camera-placeholder ${
-                stage === "success" && lastSong?.coverUrl
-                  ? "camera-placeholder--cover"
-                  : ""
+                lastSong?.coverUrl ? "camera-placeholder--cover" : ""
               }`}
             >
-              {stage === "success" && lastSong?.coverUrl ? (
+              {lastSong?.coverUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   className="playback-cover"
@@ -255,7 +300,7 @@ export function Scanner() {
         )}
       </section>
 
-      <PlayerControls compact />
+      <PlayerControls compact onStatus={syncPlayerSong} />
     </main>
   );
 }
