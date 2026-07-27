@@ -198,8 +198,9 @@ h2,
 }
 
 .camera-placeholder {
+  position: absolute;
+  inset: 0;
   display: grid;
-  height: 100%;
   place-content: center;
   justify-items: center;
   gap: 18px;
@@ -239,17 +240,64 @@ h2,
     inset 0 0 0 9px rgba(245, 159, 24, 0.1);
 }
 
-.camera-symbol.is-success {
-  color: #fff;
-  background: var(--green);
-  box-shadow: 0 14px 34px rgba(40, 163, 106, 0.25);
-}
-
 .last-song {
   max-width: 320px;
   padding: 0 20px;
   font-family: ui-rounded, "Avenir Next", Avenir, sans-serif;
   font-size: clamp(1.2rem, 3vw, 1.8rem);
+}
+
+.scan-success {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  animation: scan-success-fade 1.6s ease-out forwards;
+}
+
+.scan-success span {
+  display: grid;
+  width: 132px;
+  height: 132px;
+  place-items: center;
+  border: 8px solid rgba(255, 255, 255, 0.92);
+  border-radius: 50%;
+  color: #fff;
+  background: var(--green);
+  box-shadow: 0 18px 45px rgba(14, 88, 53, 0.34);
+  animation: scan-success-pop 1.6s cubic-bezier(0.2, 0.9, 0.28, 1) forwards;
+}
+
+@keyframes scan-success-fade {
+  0%,
+  68% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes scan-success-pop {
+  0% {
+    transform: scale(0.45);
+  }
+
+  18% {
+    transform: scale(1.08);
+  }
+
+  30%,
+  68% {
+    transform: scale(1);
+  }
+
+  100% {
+    transform: scale(0.92);
+  }
 }
 
 .scan-guide {
@@ -1150,7 +1198,7 @@ form input::placeholder {
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
 }
 
-.print-toolbar div {
+.print-toolbar__summary {
   display: flex;
   flex-direction: column;
 }
@@ -1160,8 +1208,16 @@ form input::placeholder {
   font-size: 0.83rem;
 }
 
-.print-trigger {
+.print-toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.print-trigger,
+.print-mode-toggle {
   display: inline-flex;
+  min-height: 38px;
   padding: 9px 13px;
   align-items: center;
   gap: 7px;
@@ -1170,6 +1226,32 @@ form input::placeholder {
   color: #725000;
   background: #ffe7a4;
   font-weight: 700;
+}
+
+.print-mode-toggle {
+  color: #4f5e5b;
+  background: #e9f0ee;
+}
+
+.print-mode-toggle.is-active {
+  color: #fff;
+  background: var(--teal);
+}
+
+.print-note {
+  width: min(100%, 210mm);
+  margin: 0 auto 18px;
+  padding: 11px 16px;
+  border-radius: 12px;
+  color: #4e5b58;
+  background: #e3efec;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.print-sheets {
+  display: grid;
+  gap: 18px;
 }
 
 .print-sheet {
@@ -1196,8 +1278,18 @@ form input::placeholder {
   text-align: center;
 }
 
+.print-card--blank {
+  visibility: hidden;
+}
+
+.print-card--back {
+  align-content: center;
+  gap: 3mm;
+}
+
 .print-card__title {
   display: flex;
+  max-width: 100%;
   min-width: 0;
   flex-direction: column;
 }
@@ -1212,9 +1304,33 @@ form input::placeholder {
   font-size: 9pt;
 }
 
-.print-card img {
+.print-card__title strong,
+.print-card__title span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.print-marker {
   width: 42mm;
   height: 42mm;
+}
+
+.print-card__cover {
+  display: grid;
+  width: 48mm;
+  height: 48mm;
+  overflow: hidden;
+  place-items: center;
+  border-radius: 4mm;
+  color: #8f877d;
+  background: #eee9e1;
+}
+
+.print-card__cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .print-card small {
@@ -1313,11 +1429,25 @@ form input::placeholder {
     display: none;
   }
 
+  .print-note {
+    display: none;
+  }
+
+  .print-sheets {
+    display: block;
+  }
+
   .print-sheet {
     width: 210mm;
     min-height: 297mm;
+    margin: 0;
     padding: 11mm;
+    break-after: page;
     box-shadow: none;
+  }
+
+  .print-sheet:last-child {
+    break-after: auto;
   }
 }
 

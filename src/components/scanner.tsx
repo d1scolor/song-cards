@@ -31,17 +31,22 @@ export function Scanner() {
     const song = status.song;
     if (!song) return;
     setLastSong((current) => {
+      const isSameSong =
+        current !== null &&
+        (current.id === song.id || current.title === song.title);
+      const coverUrl =
+        song.coverUrl ?? (isSameSong ? current.coverUrl : null);
       if (
         current?.id === song.id &&
         current?.title === song.title &&
-        current?.coverUrl === song.coverUrl
+        current?.coverUrl === coverUrl
       ) {
         return current;
       }
       return {
         id: song.id,
         title: song.title,
-        coverUrl: song.coverUrl
+        coverUrl
       };
     });
   }, []);
@@ -227,14 +232,8 @@ export function Scanner() {
                 />
               ) : (
                 <>
-                  <div
-                    className={`camera-symbol ${
-                      stage === "success" ? "is-success" : ""
-                    }`}
-                  >
-                    {stage === "success" ? (
-                      <Check size={66} strokeWidth={3} />
-                    ) : stage === "error" ? (
+                  <div className="camera-symbol">
+                    {stage === "error" ? (
                       <CameraOff size={62} />
                     ) : (
                       <Music2 size={64} />
@@ -245,6 +244,18 @@ export function Scanner() {
                   )}
                 </>
               )}
+            </div>
+          )}
+
+          {stage === "success" && (
+            <div
+              className="scan-success"
+              role="status"
+              aria-label="Card scanned successfully"
+            >
+              <span>
+                <Check size={72} strokeWidth={3.2} aria-hidden="true" />
+              </span>
             </div>
           )}
 
