@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { PlayerControls } from "@/components/player-controls";
 
 type ScanStage = "idle" | "opening" | "scanning" | "starting" | "success" | "error";
+type ScannedSong = { title: string; coverUrl: string | null };
 
 export function Scanner() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -19,7 +20,7 @@ export function Scanner() {
   const lastFrameRef = useRef(0);
   const [stage, setStage] = useState<ScanStage>("idle");
   const [message, setMessage] = useState("Pick a card and tap the button.");
-  const [lastSong, setLastSong] = useState<string | null>(null);
+  const [lastSong, setLastSong] = useState<ScannedSong | null>(null);
 
   const stopCamera = useCallback(() => {
     if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
@@ -46,7 +47,10 @@ export function Scanner() {
         });
         const body = await response.json();
         if (!response.ok) throw new Error(body.error || "That card did not work.");
-        setLastSong(body.song.title);
+        setLastSong({
+          title: body.song.title,
+          coverUrl: body.song.coverUrl ?? null
+        });
         setStage("success");
         setMessage(`${body.song.title} is playing!`);
       } catch (error) {
@@ -162,21 +166,40 @@ export function Scanner() {
           <canvas ref={canvasRef} hidden />
 
           {!scanning && (
-            <div className="camera-placeholder">
-              <div
-                className={`camera-symbol ${
-                  stage === "success" ? "is-success" : ""
-                }`}
-              >
-                {stage === "success" ? (
-                  <Check size={66} strokeWidth={3} />
-                ) : stage === "error" ? (
-                  <CameraOff size={62} />
-                ) : (
-                  <Music2 size={64} />
-                )}
-              </div>
-              {lastSong && <strong className="last-song">{lastSong}</strong>}
+            <div
+              className={`camera-placeholder ${
+                stage === "success" && lastSong?.coverUrl
+                  ? "camera-placeholder--cover"
+                  : ""
+              }`}
+            >
+              {stage === "success" && lastSong?.coverUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  className="playback-cover"
+                  src={lastSong.coverUrl}
+                  alt={`${lastSong.title} cover`}
+                />
+              ) : (
+                <>
+                  <div
+                    className={`camera-symbol ${
+                      stage === "success" ? "is-success" : ""
+                    }`}
+                  >
+                    {stage === "success" ? (
+                      <Check size={66} strokeWidth={3} />
+                    ) : stage === "error" ? (
+                      <CameraOff size={62} />
+                    ) : (
+                      <Music2 size={64} />
+                    )}
+                  </div>
+                  {lastSong && (
+                    <strong className="last-song">{lastSong.title}</strong>
+                  )}
+                </>
+              )}
             </div>
           )}
 

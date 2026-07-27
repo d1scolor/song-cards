@@ -11,20 +11,38 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
+FROM debian:bookworm-slim AS media-tools
+ARG TARGETARCH
+ARG YTDLP_VERSION=2026.07.04
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates curl \
+  && case "$TARGETARCH" in \
+       amd64) asset="yt-dlp_linux"; checksum="6bbb3d314cde4febe36e5fa1d55462e29c974f63444e707871834f6d8cc210ae" ;; \
+       arm64) asset="yt-dlp_linux_aarch64"; checksum="b6ce97646773070d7a7ffd6bbbdcaecb47c48483909c54c915bf08a7a9b5e0b1" ;; \
+       *) echo "Unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
+     esac \
+  && curl -fsSL \
+       "https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/${asset}" \
+       -o /yt-dlp \
+  && echo "${checksum}  /yt-dlp" | sha256sum -c - \
+  && chmod 0755 /yt-dlp
+
 FROM node:24-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     HOSTNAME=0.0.0.0 \
     PORT=3000 \
-    DATA_DIR=/data
+    DATA_DIR=/data \
+    YTDLP_BUNDLED_PATH=/usr/local/libexec/yt-dlp
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates tini \
+  && apt-get install -y --no-install-recommends ca-certificates ffmpeg tini \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
 COPY --from=build /app/public ./public
+COPY --from=media-tools /yt-dlp /usr/local/libexec/yt-dlp
 RUN mkdir -p /data/db /data/media \
   && chown -R node:node /data
 USER node

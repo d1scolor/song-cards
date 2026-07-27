@@ -14,6 +14,7 @@ const song: Song = {
   filename: "test.mp3",
   originalName: "test.mp3",
   mimeType: "audio/mpeg",
+  coverUrl: "/api/covers/test-song",
   createdAt: new Date(0).toISOString()
 };
 
@@ -21,6 +22,7 @@ test("mock playback supports play, pause, resume, stop, and volume", async () =>
   const playing = await playSong(song);
   assert.equal(playing.state, "play");
   assert.equal(playing.song?.title, song.title);
+  assert.equal(playing.song?.coverUrl, song.coverUrl);
 
   const paused = await playerAction({ action: "pause" });
   assert.equal(paused.state, "pause");

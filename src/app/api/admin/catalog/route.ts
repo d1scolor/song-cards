@@ -7,23 +7,22 @@ import { isAdminRequest } from "@/lib/auth";
 import { config } from "@/lib/config";
 import { mediaDirectory } from "@/lib/db";
 import {
+  MediaValidationError,
+  storeAudioBuffer,
+  storeCoverBuffer
+} from "@/lib/media";
+import {
   createSongCard,
   listSongCards,
   nextMarkerId
 } from "@/lib/repository";
 import { triggerOwnToneScan } from "@/lib/playback";
 
-const audioTypes = new Set([
-  "audio/aac",
-  "audio/flac",
-  "audio/m4a",
-  "audio/mp4",
-  "audio/mpeg",
-  "audio/ogg",
-  "audio/wav",
-  "audio/x-flac",
-  "audio/x-m4a",
-  "audio/x-wav"
+const coverTypes = new Set([
+  "image/avif",
+  "image/jpeg",
+  "image/png",
+  "image/webp"
 ]);
 
 const fieldsSchema = z.object({
@@ -54,6 +53,9 @@ export async function POST(request: NextRequest) {
     markerId: form.get("markerId")
   });
   const audio = form.get("audio");
+  const coverValue = form.get("cover");
+  const cover =
+    coverValue instanceof File && coverValue.size > 0 ? coverValue : null;
 
   if (!parsed.success) {
     return NextResponse.json(
@@ -70,34 +72,72 @@ export async function POST(request: NextRequest) {
       { status: 413 }
     );
   }
-  if (!audioTypes.has(audio.type)) {
+  if (cover && cover.size > config.maxCoverBytes) {
     return NextResponse.json(
-      { error: `Unsupported audio type: ${audio.type || "unknown"}.` },
+      { error: "The cover image is larger than the configured upload limit." },
+      { status: 413 }
+    );
+  }
+  if (cover && !coverTypes.has(cover.type)) {
+    return NextResponse.json(
+      { error: "Use a JPEG, PNG, WebP, or AVIF cover image." },
       { status: 415 }
     );
   }
 
-  const extension = path.extname(audio.name).toLowerCase().slice(0, 10);
-  const filename = `${crypto.randomUUID()}${extension}`;
-  const target = path.join(mediaDirectory, filename);
-  await fs.writeFile(target, Buffer.from(await audio.arrayBuffer()), {
-    flag: "wx",
-    mode: 0o640
-  });
+  let storedAudio: Awaited<ReturnType<typeof storeAudioBuffer>> | null = null;
+  let storedCover: Awaited<ReturnType<typeof storeCoverBuffer>> | null = null;
+  try {
+    storedAudio = await storeAudioBuffer(
+      Buffer.from(await audio.arrayBuffer()),
+      audio.name
+    );
+    if (cover) {
+      storedCover = await storeCoverBuffer(
+        Buffer.from(await cover.arrayBuffer())
+      );
+    }
+  } catch (error) {
+    if (storedCover) await fs.unlink(storedCover.target).catch(() => undefined);
+    if (storedAudio) {
+      await fs
+        .unlink(path.join(mediaDirectory, storedAudio.filename))
+        .catch(() => undefined);
+    }
+    return NextResponse.json(
+      {
+        error:
+          error instanceof MediaValidationError
+            ? error.message
+            : "Unable to process the uploaded media."
+      },
+      { status: 415 }
+    );
+  }
+  if (!storedAudio) {
+    return NextResponse.json(
+      { error: "Unable to process the uploaded audio." },
+      { status: 500 }
+    );
+  }
 
   try {
     const card = createSongCard({
       ...parsed.data,
-      filename,
+      filename: storedAudio.filename,
       originalName: audio.name,
-      mimeType: audio.type
+      mimeType: storedAudio.mimeType,
+      coverFilename: storedCover?.coverFilename ?? null
     });
     triggerOwnToneScan().catch((error) => {
       console.error("Unable to trigger OwnTone scan", error);
     });
     return NextResponse.json({ card }, { status: 201 });
   } catch (error) {
-    await fs.unlink(target).catch(() => undefined);
+    await fs
+      .unlink(path.join(mediaDirectory, storedAudio.filename))
+      .catch(() => undefined);
+    if (storedCover) await fs.unlink(storedCover.target).catch(() => undefined);
     const message =
       error instanceof Error && error.message.includes("UNIQUE")
         ? "That marker number is already assigned."

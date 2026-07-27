@@ -93,8 +93,20 @@ export function PlayerControls({
       </div>
 
       <div className="now-playing">
-        <div className="now-playing__art" aria-hidden="true">
-          <Speaker size={compact ? 28 : 38} strokeWidth={2.4} />
+        <div className="now-playing__art">
+          {status?.song?.coverUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={status.song.coverUrl}
+              alt={`${status.song.title} cover`}
+            />
+          ) : (
+            <Speaker
+              size={compact ? 28 : 38}
+              strokeWidth={2.4}
+              aria-hidden="true"
+            />
+          )}
         </div>
         <div className="now-playing__copy">
           <span className="eyebrow">

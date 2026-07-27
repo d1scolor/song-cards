@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import database, { mediaDirectory } from "@/lib/db";
+import database, { coverDirectory, mediaDirectory } from "@/lib/db";
 import type { Song, SongCard } from "@/lib/types";
 
 type SongRow = {
@@ -10,6 +10,7 @@ type SongRow = {
   filename: string;
   original_name: string;
   mime_type: string;
+  cover_filename: string | null;
   created_at: string;
 };
 
@@ -26,6 +27,9 @@ function mapSong(row: SongRow): Song {
     filename: row.filename,
     originalName: row.original_name,
     mimeType: row.mime_type,
+    coverUrl: row.cover_filename
+      ? `/api/covers/${encodeURIComponent(row.id)}`
+      : null,
     createdAt: row.created_at
   };
 }
@@ -64,6 +68,24 @@ export function findSongByMarker(markerId: number): Song | null {
   return row ? mapSong(row) : null;
 }
 
+export function findSongByFilename(filename: string): Song | null {
+  const row = database
+    .prepare("SELECT * FROM songs WHERE filename = ?")
+    .get(filename) as SongRow | undefined;
+
+  return row ? mapSong(row) : null;
+}
+
+export function findSongCover(songId: string): string | null {
+  const row = database
+    .prepare("SELECT cover_filename FROM songs WHERE id = ?")
+    .get(songId) as { cover_filename: string | null } | undefined;
+
+  return row?.cover_filename
+    ? path.join(coverDirectory, row.cover_filename)
+    : null;
+}
+
 export function nextMarkerId(): number {
   const ids = new Set(
     (
@@ -86,6 +108,7 @@ export function createSongCard(input: {
   filename: string;
   originalName: string;
   mimeType: string;
+  coverFilename: string | null;
 }): SongCard {
   const id = crypto.randomUUID();
   const createdAt = new Date().toISOString();
@@ -94,8 +117,8 @@ export function createSongCard(input: {
     database
       .prepare(
         `INSERT INTO songs
-          (id, title, artist, filename, original_name, mime_type, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
+          (id, title, artist, filename, original_name, mime_type, cover_filename, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
@@ -104,6 +127,7 @@ export function createSongCard(input: {
         input.filename,
         input.originalName,
         input.mimeType,
+        input.coverFilename,
         createdAt
       );
     database
@@ -123,14 +147,19 @@ export function createSongCard(input: {
     filename: input.filename,
     originalName: input.originalName,
     mimeType: input.mimeType,
+    coverUrl: input.coverFilename
+      ? `/api/covers/${encodeURIComponent(id)}`
+      : null,
     createdAt
   };
 }
 
 export function deleteSongCard(songId: string): boolean {
   const row = database
-    .prepare("SELECT filename FROM songs WHERE id = ?")
-    .get(songId) as { filename: string } | undefined;
+    .prepare("SELECT filename, cover_filename FROM songs WHERE id = ?")
+    .get(songId) as
+    | { filename: string; cover_filename: string | null }
+    | undefined;
   if (!row) return false;
 
   database.transaction(() => {
@@ -143,6 +172,13 @@ export function deleteSongCard(songId: string): boolean {
     fs.unlinkSync(path.join(mediaDirectory, row.filename));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  if (row.cover_filename) {
+    try {
+      fs.unlinkSync(path.join(coverDirectory, row.cover_filename));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
   }
   return true;
 }

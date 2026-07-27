@@ -1,5 +1,6 @@
 import path from "node:path";
 import { config } from "@/lib/config";
+import { findSongByFilename } from "@/lib/repository";
 import type { PlayerStatus, Song } from "@/lib/types";
 
 type MockRuntime = {
@@ -79,6 +80,10 @@ async function ownToneStatus(): Promise<PlayerStatus> {
       ownToneRequest("/api/queue?id=now_playing")
     ]);
     const item = queue?.items?.[0];
+    const catalogSong =
+      typeof item?.path === "string"
+        ? findSongByFilename(path.basename(item.path))
+        : null;
     return {
       backend: "owntone",
       connected: true,
@@ -86,11 +91,19 @@ async function ownToneStatus(): Promise<PlayerStatus> {
       volume: Math.min(player.volume ?? 0, config.maxVolume),
       progressMs: player.item_progress_ms ?? 0,
       durationMs: player.item_length_ms ?? item?.length_ms ?? 0,
-      song: item
+      song: catalogSong
+        ? {
+            id: catalogSong.id,
+            title: catalogSong.title,
+            artist: catalogSong.artist,
+            coverUrl: catalogSong.coverUrl
+          }
+        : item
         ? {
             id: String(item.track_id ?? item.id),
             title: item.title ?? "Unknown song",
-            artist: item.artist ?? ""
+            artist: item.artist ?? "",
+            coverUrl: null
           }
         : null
     };
@@ -146,7 +159,12 @@ export async function getPlayerStatus(): Promise<PlayerStatus> {
 export async function playSong(song: Song) {
   if (config.playbackBackend === "mock") {
     mock.state = "play";
-    mock.song = { id: song.id, title: song.title, artist: song.artist };
+    mock.song = {
+      id: song.id,
+      title: song.title,
+      artist: song.artist,
+      coverUrl: song.coverUrl
+    };
     mock.progressMs = 0;
     mock.startedAt = Date.now();
     return mockStatus();

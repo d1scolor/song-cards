@@ -18,15 +18,31 @@ services:
     cap_drop:
       - ALL
 
+  owntone-init:
+    image: docker.io/library/busybox:1.37
+    profiles:
+      - airplay
+    user: "0:0"
+    command: ["chown", "-R", "1000:1000", "/config", "/cache"]
+    volumes:
+      - owntone-config:/config
+      - owntone-cache:/cache
+    restart: "no"
+
   owntone:
     image: docker.io/owntone/owntone:29.1
     profiles:
       - airplay
     network_mode: host
     restart: unless-stopped
+    depends_on:
+      owntone-init:
+        condition: service_completed_successfully
     environment:
       UID: "1000"
       GID: "1000"
+    tmpfs:
+      - /run
     volumes:
       - owntone-config:/etc/owntone
       - owntone-cache:/var/cache/owntone
