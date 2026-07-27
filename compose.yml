@@ -1,0 +1,39 @@
+services:
+  app:
+    image: "${APP_IMAGE:-song-cards:local}"
+    build:
+      context: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - song-cards-db:/data/db
+      - song-cards-media:/data/media
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  owntone:
+    image: docker.io/owntone/owntone:29.1
+    profiles:
+      - airplay
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      UID: "1000"
+      GID: "1000"
+    volumes:
+      - owntone-config:/etc/owntone
+      - owntone-cache:/var/cache/owntone
+      - song-cards-media:/srv/media:ro
+
+volumes:
+  song-cards-db:
+  song-cards-media:
+  owntone-config:
+  owntone-cache:

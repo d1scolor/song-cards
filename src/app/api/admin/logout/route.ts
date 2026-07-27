@@ -1,0 +1,13 @@
+import { NextResponse } from "next/server";
+import { adminCookieName } from "@/lib/auth";
+
+export function POST() {
+  const response = NextResponse.json({ ok: true });
+  response.cookies.set(adminCookieName, "", {
+    httpOnly: true,
+    sameSite: "strict",
+    path: "/",
+    maxAge: 0
+  });
+  return response;
+}
