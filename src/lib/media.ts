@@ -3,7 +3,11 @@ import path from "node:path";
 import sharp from "sharp";
 import { runCommand } from "@/lib/command";
 import { config } from "@/lib/config";
-import { coverDirectory, mediaDirectory } from "@/lib/db";
+import {
+  coverDirectory,
+  ensureStorageDirectories,
+  mediaDirectory
+} from "@/lib/db";
 
 type ProbeStream = {
   codec_name?: string;
@@ -136,6 +140,7 @@ export async function storeAudioFile(
   mimeType: string;
   normalized: boolean;
 }> {
+  ensureStorageDirectories();
   const probe = await probeAudio(sourcePath);
   const sourceExtension = safeExtension(originalName);
   const direct = canStoreWithoutConversion(
@@ -198,6 +203,7 @@ export async function storeAudioFile(
 }
 
 export async function storeAudioBuffer(buffer: Buffer, originalName: string) {
+  ensureStorageDirectories();
   const temporaryDirectory = await fs.mkdtemp(
     path.join(mediaDirectory, ".upload-")
   );
@@ -231,6 +237,7 @@ export async function normalizeCover(buffer: Buffer) {
 }
 
 export async function storeCoverBuffer(buffer: Buffer) {
+  ensureStorageDirectories();
   const coverFilename = `${crypto.randomUUID()}.webp`;
   const target = path.join(coverDirectory, coverFilename);
   await fs.writeFile(target, await normalizeCover(buffer), {

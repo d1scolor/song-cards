@@ -1,6 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import database, { coverDirectory, mediaDirectory } from "@/lib/db";
+import {
+  coverDirectory,
+  getDatabase,
+  mediaDirectory
+} from "@/lib/db";
 import type { Song, SongCard } from "@/lib/types";
 
 type SongRow = {
@@ -43,6 +47,7 @@ function mapSongCard(row: SongCardRow): SongCard {
 }
 
 export function listSongCards(): SongCard[] {
+  const database = getDatabase();
   const rows = database
     .prepare(
       `SELECT songs.*, markers.id AS marker_id, markers.active
@@ -56,6 +61,7 @@ export function listSongCards(): SongCard[] {
 }
 
 export function findSongByMarker(markerId: number): Song | null {
+  const database = getDatabase();
   const row = database
     .prepare(
       `SELECT songs.*
@@ -69,6 +75,7 @@ export function findSongByMarker(markerId: number): Song | null {
 }
 
 export function findSongByFilename(filename: string): Song | null {
+  const database = getDatabase();
   const row = database
     .prepare("SELECT * FROM songs WHERE filename = ?")
     .get(filename) as SongRow | undefined;
@@ -77,6 +84,7 @@ export function findSongByFilename(filename: string): Song | null {
 }
 
 export function findSongCover(songId: string): string | null {
+  const database = getDatabase();
   const row = database
     .prepare("SELECT cover_filename FROM songs WHERE id = ?")
     .get(songId) as { cover_filename: string | null } | undefined;
@@ -87,6 +95,7 @@ export function findSongCover(songId: string): string | null {
 }
 
 export function nextMarkerId(): number {
+  const database = getDatabase();
   const ids = new Set(
     (
       database.prepare("SELECT id FROM markers ORDER BY id").all() as {
@@ -110,6 +119,7 @@ export function createSongCard(input: {
   mimeType: string;
   coverFilename: string | null;
 }): SongCard {
+  const database = getDatabase();
   const id = crypto.randomUUID();
   const createdAt = new Date().toISOString();
 
@@ -155,6 +165,7 @@ export function createSongCard(input: {
 }
 
 export function deleteSongCard(songId: string): boolean {
+  const database = getDatabase();
   const row = database
     .prepare("SELECT filename, cover_filename FROM songs WHERE id = ?")
     .get(songId) as
