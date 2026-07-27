@@ -175,7 +175,7 @@ export function deleteSongCard(songId: string): boolean {
 
   database.transaction(() => {
     database
-      .prepare("UPDATE markers SET active = 0 WHERE song_id = ?")
+      .prepare("DELETE FROM markers WHERE song_id = ?")
       .run(songId);
     database.prepare("DELETE FROM songs WHERE id = ?").run(songId);
   })();

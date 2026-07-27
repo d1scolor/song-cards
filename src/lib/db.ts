@@ -38,13 +38,17 @@ export function getDatabase() {
 
     CREATE TABLE IF NOT EXISTS markers (
       id INTEGER PRIMARY KEY CHECK (id >= 0 AND id < 250),
-      song_id TEXT REFERENCES songs(id) ON DELETE SET NULL,
+      song_id TEXT NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
       active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL
     );
 
     CREATE INDEX IF NOT EXISTS markers_song_id_idx ON markers(song_id);
   `);
+
+  // Releases markers orphaned by versions that retained marker rows after
+  // deleting their songs. Existing databases keep their original FK schema.
+  next.prepare("DELETE FROM markers WHERE song_id IS NULL").run();
 
   const songColumns = next
     .prepare("PRAGMA table_info(songs)")
