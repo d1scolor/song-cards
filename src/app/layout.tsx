@@ -8,6 +8,11 @@ export const metadata: Metadata = {
   },
   description: "Pick a card, scan its marker, and play a favourite song.",
   applicationName: "Song Cards",
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    shortcut: "/icon.svg",
+    apple: "/icon.svg"
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",

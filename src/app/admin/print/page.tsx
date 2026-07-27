@@ -48,10 +48,6 @@ function CoverCard({ card }: { card: SongCard | null }) {
           <ImageIcon size={40} strokeWidth={1.8} aria-hidden="true" />
         )}
       </div>
-      <div className="print-card__title">
-        <strong>{card.title}</strong>
-        <span>{card.artist || "Song card"}</span>
-      </div>
     </article>
   );
 }

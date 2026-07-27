@@ -1283,8 +1283,8 @@ form input::placeholder {
 }
 
 .print-card--back {
-  align-content: center;
-  gap: 3mm;
+  overflow: hidden;
+  padding: 3mm;
 }
 
 .print-card__title {
@@ -1318,19 +1318,20 @@ form input::placeholder {
 
 .print-card__cover {
   display: grid;
-  width: 48mm;
-  height: 48mm;
+  width: 72mm;
+  aspect-ratio: 16 / 9;
   overflow: hidden;
   place-items: center;
-  border-radius: 4mm;
+  border-radius: 3mm;
   color: #8f877d;
-  background: #eee9e1;
+  background: #fff;
+  transform: rotate(90deg);
 }
 
 .print-card__cover img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .print-card small {
