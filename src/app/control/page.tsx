@@ -17,9 +17,14 @@ export default function ControlPage() {
           </span>
           <span>Song Cards</span>
         </Link>
-        <Link className="text-link" href="/admin">
-          Manage cards
-        </Link>
+        <nav className="control-nav">
+          <Link className="text-link" href="/cards">
+            Browse cards
+          </Link>
+          <Link className="text-link" href="/admin">
+            Manage cards
+          </Link>
+        </nav>
       </header>
       <section className="control-hero">
         <span className="section-kicker">Caregiver controls</span>

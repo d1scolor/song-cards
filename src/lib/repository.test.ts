@@ -39,6 +39,7 @@ legacyDatabase.close();
 const {
   createSongCard,
   deleteSongCard,
+  findSongCardById,
   nextMarkerId
 } = await import("@/lib/repository");
 
@@ -60,8 +61,10 @@ test("deleting a song releases its marker for reuse", () => {
     coverFilename: null
   });
 
+  assert.deepEqual(findSongCardById(first.id), first);
   assert.equal(nextMarkerId(), 1);
   assert.equal(deleteSongCard(first.id), true);
+  assert.equal(findSongCardById(first.id), null);
   assert.equal(nextMarkerId(), 0);
 
   const replacement = createSongCard({

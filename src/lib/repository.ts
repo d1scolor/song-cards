@@ -60,6 +60,20 @@ export function listSongCards(): SongCard[] {
   return rows.map(mapSongCard);
 }
 
+export function findSongCardById(songId: string): SongCard | null {
+  const database = getDatabase();
+  const row = database
+    .prepare(
+      `SELECT songs.*, markers.id AS marker_id, markers.active
+       FROM markers
+       JOIN songs ON songs.id = markers.song_id
+       WHERE songs.id = ? AND markers.active = 1`
+    )
+    .get(songId) as SongCardRow | undefined;
+
+  return row ? mapSongCard(row) : null;
+}
+
 export function findSongByMarker(markerId: number): Song | null {
   const database = getDatabase();
   const row = database

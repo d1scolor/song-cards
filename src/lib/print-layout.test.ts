@@ -6,7 +6,7 @@ import {
 } from "@/lib/print-layout";
 
 test("pads print sheets and mirrors each back row for long-edge duplex", () => {
-  const [front] = makePrintSheets(["A", "B", "C", "D"]);
+  const [front] = makePrintSheets(["A", "B", "C", "D"], 9);
 
   assert.deepEqual(front, [
     "A",
@@ -19,7 +19,7 @@ test("pads print sheets and mirrors each back row for long-edge duplex", () => {
     null,
     null
   ]);
-  assert.deepEqual(mirrorPrintRows(front), [
+  assert.deepEqual(mirrorPrintRows(front, 3), [
     "C",
     "B",
     "A",
@@ -32,22 +32,14 @@ test("pads print sheets and mirrors each back row for long-edge duplex", () => {
   ]);
 });
 
-test("splits card collections across nine-card print sheets", () => {
+test("splits card collections at the selected print density", () => {
   const sheets = makePrintSheets(
-    Array.from({ length: 10 }, (_, index) => index)
+    Array.from({ length: 10 }, (_, index) => index),
+    4
   );
 
-  assert.equal(sheets.length, 2);
-  assert.deepEqual(sheets[0], [0, 1, 2, 3, 4, 5, 6, 7, 8]);
-  assert.deepEqual(sheets[1], [
-    9,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null
-  ]);
+  assert.equal(sheets.length, 3);
+  assert.deepEqual(sheets[0], [0, 1, 2, 3]);
+  assert.deepEqual(sheets[1], [4, 5, 6, 7]);
+  assert.deepEqual(sheets[2], [8, 9, null, null]);
 });

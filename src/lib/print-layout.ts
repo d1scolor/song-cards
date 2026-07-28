@@ -1,17 +1,24 @@
-export const cardsPerPrintSheet = 9;
-export const printSheetColumns = 3;
+export const printDensityOptions = [1, 4, 9, 16] as const;
+export type PrintDensity = (typeof printDensityOptions)[number];
 
-export function makePrintSheets<T>(items: T[]): (T | null)[][] {
+export function printSheetColumns(cardsPerSheet: PrintDensity) {
+  return Math.sqrt(cardsPerSheet);
+}
+
+export function makePrintSheets<T>(
+  items: T[],
+  cardsPerSheet: PrintDensity
+): (T | null)[][] {
   return Array.from(
-    { length: Math.ceil(items.length / cardsPerPrintSheet) },
+    { length: Math.ceil(items.length / cardsPerSheet) },
     (_, index) => {
       const itemsForSheet = items.slice(
-        index * cardsPerPrintSheet,
-        (index + 1) * cardsPerPrintSheet
+        index * cardsPerSheet,
+        (index + 1) * cardsPerSheet
       );
       return [
         ...itemsForSheet,
-        ...Array<T | null>(cardsPerPrintSheet - itemsForSheet.length).fill(
+        ...Array<T | null>(cardsPerSheet - itemsForSheet.length).fill(
           null
         )
       ];
@@ -19,14 +26,17 @@ export function makePrintSheets<T>(items: T[]): (T | null)[][] {
   );
 }
 
-export function mirrorPrintRows<T>(items: (T | null)[]): (T | null)[] {
+export function mirrorPrintRows<T>(
+  items: (T | null)[],
+  columns: number
+): (T | null)[] {
   return Array.from(
-    { length: cardsPerPrintSheet / printSheetColumns },
+    { length: items.length / columns },
     (_, row) =>
       items
         .slice(
-          row * printSheetColumns,
-          (row + 1) * printSheetColumns
+          row * columns,
+          (row + 1) * columns
         )
         .reverse()
   ).flat();
