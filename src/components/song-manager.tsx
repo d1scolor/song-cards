@@ -5,32 +5,24 @@ import {
   Download,
   FileMusic,
   ImagePlus,
-  LogOut,
   Plus,
   Printer,
-  Radio,
   RefreshCw,
   TriangleAlert,
   Trash2
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import type {
-  SongCard,
-  YouTubeImportJob,
-  YtDlpStatus
-} from "@/lib/types";
+import type { SongCard, YouTubeImportJob } from "@/lib/types";
 
-export function AdminClient({
-  initialCards,
+export function SongManager({
+  initialSongs,
   initialNextMarker
 }: {
-  initialCards: SongCard[];
+  initialSongs: SongCard[];
   initialNextMarker: number;
 }) {
-  const router = useRouter();
-  const [cards, setCards] = useState(initialCards);
+  const [songs, setSongs] = useState(initialSongs);
   const [nextMarker, setNextMarker] = useState(initialNextMarker);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -39,22 +31,13 @@ export function AdminClient({
   const [importUrl, setImportUrl] = useState("");
   const [importJob, setImportJob] = useState<YouTubeImportJob | null>(null);
   const [importError, setImportError] = useState("");
-  const [toolStatus, setToolStatus] = useState<YtDlpStatus | null>(null);
-  const [updatingTool, setUpdatingTool] = useState(false);
 
   const refreshCatalog = useCallback(async () => {
     const response = await fetch("/api/admin/catalog", { cache: "no-store" });
     if (!response.ok) return;
     const body = await response.json();
-    setCards(body.cards);
+    setSongs(body.cards);
     setNextMarker(body.nextMarkerId);
-  }, []);
-
-  useEffect(() => {
-    void fetch("/api/admin/tools/yt-dlp", { cache: "no-store" })
-      .then((response) => response.json())
-      .then((body) => setToolStatus(body.status))
-      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -136,17 +119,9 @@ export function AdminClient({
     setImportJob(body.job);
   }
 
-  async function updateDownloader() {
-    setUpdatingTool(true);
-    const response = await fetch("/api/admin/tools/yt-dlp", { method: "POST" });
-    const body = await response.json();
-    setUpdatingTool(false);
-    if (response.ok) setToolStatus(body.status);
-  }
-
-  async function removeCard(card: SongCard) {
-    if (!window.confirm(`Remove “${card.title}” and its files?`)) return;
-    const response = await fetch(`/api/admin/catalog/${card.id}`, {
+  async function removeSong(song: SongCard) {
+    if (!window.confirm(`Remove “${song.title}” and its files?`)) return;
+    const response = await fetch(`/api/admin/catalog/${song.id}`, {
       method: "DELETE"
     });
     if (!response.ok) {
@@ -154,46 +129,21 @@ export function AdminClient({
       setError(body.error ?? "Unable to remove the song.");
       return;
     }
-    setCards((current) => current.filter((item) => item.id !== card.id));
-  }
-
-  async function logout() {
-    await fetch("/api/admin/logout", { method: "POST" });
-    router.replace("/admin/login");
-    router.refresh();
+    setSongs((current) => current.filter((item) => item.id !== song.id));
   }
 
   return (
     <main className="admin-shell">
-      <header className="dashboard-header admin-header">
-        <Link href="/play" className="dashboard-brand">
-          <span className="brand-mark">
-            <FileMusic size={25} />
-          </span>
-          <span>Song Cards</span>
-        </Link>
-        <nav>
-          <Link className="text-link" href="/control">
-            <Radio size={18} />
-            Controls
-          </Link>
-          <button className="text-button" type="button" onClick={() => void logout()}>
-            <LogOut size={18} />
-            Sign out
-          </button>
-        </nav>
-      </header>
-
       <section className="admin-hero">
         <div>
-          <span className="section-kicker">Card library</span>
+          <span className="section-kicker">Song management</span>
           <h1>Make music tangible.</h1>
-          <p>Add a song, assign its marker, then print a card ready to scan.</p>
+          <p>Add songs and assign the markers used by printable cards.</p>
         </div>
         <Link
-          className={`secondary-button ${cards.length === 0 ? "is-disabled" : ""}`}
-          href={cards.length ? "/admin/print" : "#"}
-          aria-disabled={cards.length === 0}
+          className={`secondary-button ${songs.length === 0 ? "is-disabled" : ""}`}
+          href={songs.length ? "/admin/print" : "#"}
+          aria-disabled={songs.length === 0}
         >
           <Printer size={20} />
           Print card sheet
@@ -267,7 +217,7 @@ export function AdminClient({
             {error && <p className="form-error">{error}</p>}
             <button className="primary-button" type="submit" disabled={busy}>
               <Plus size={21} />
-              {busy ? "Uploading…" : "Add song card"}
+              {busy ? "Uploading…" : "Add song"}
             </button>
           </form>
           </section>
@@ -352,70 +302,50 @@ export function AdminClient({
               </p>
             </form>
 
-            <div className="tool-status">
-              <div>
-                <strong>
-                  yt-dlp {toolStatus?.version ?? "checking…"}
-                </strong>
-                <span>{toolStatus?.message ?? "Checking the downloader…"}</span>
-              </div>
-              <button
-                type="button"
-                className="tool-update-button"
-                disabled={updatingTool || !toolStatus?.managed}
-                onClick={() => void updateDownloader()}
-              >
-                <RefreshCw
-                  className={updatingTool ? "spin" : ""}
-                  size={16}
-                />
-                Update
-              </button>
-            </div>
           </section>
         </div>
 
-        <section className="surface library-card">
+        <section className="surface admin-song-list">
           <div className="surface-heading">
             <span className="step-number">2</span>
             <div>
-              <h2>Your cards</h2>
-              <p>{cards.length} of 250 marker numbers assigned</p>
+              <h2>Your songs</h2>
+              <p>{songs.length} of 250 marker numbers assigned</p>
             </div>
           </div>
 
-          {cards.length === 0 ? (
+          {songs.length === 0 ? (
             <div className="empty-library">
               <FileMusic size={36} />
-              <strong>No song cards yet</strong>
-              <span>Your first card will appear here.</span>
+              <strong>No songs yet</strong>
+              <span>Your first song will appear here.</span>
             </div>
           ) : (
             <div className="catalog-list">
-              {cards.map((card) => (
-                <article className="catalog-item" key={card.id}>
+              {songs.map((song) => (
+                <article className="catalog-item" key={song.id}>
                   {/* SVG is generated by our marker endpoint. */}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={`/api/markers/${card.markerId}`}
-                    alt={`ArUco marker ${card.markerId}`}
+                    src={`/api/markers/${song.markerId}`}
+                    alt={`ArUco marker ${song.markerId}`}
                   />
                   <div>
                     <span className="catalog-title-row">
-                      <strong>{card.title}</strong>
-                      {card.coverUrl && (
+                      <strong>{song.title}</strong>
+                      {song.coverUrl && (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={card.coverUrl} alt="" className="catalog-cover" />
+                        <img src={song.coverUrl} alt="" className="catalog-cover" />
                       )}
                     </span>
-                    <span>{card.artist || "Unknown artist"}</span>
-                    <small>Marker {card.markerId}</small>
+                    <span>{song.artist || "Unknown artist"}</span>
+                    <small>Marker {song.markerId}</small>
                   </div>
                   <button
                     type="button"
                     className="icon-button icon-button--danger"
-                    aria-label={`Remove ${card.title}`}
-                    onClick={() => void removeCard(card)}
+                    aria-label={`Remove ${song.title}`}
+                    onClick={() => void removeSong(song)}
                   >
                     <Trash2 size={19} />
                   </button>

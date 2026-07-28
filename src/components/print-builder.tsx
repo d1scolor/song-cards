@@ -116,9 +116,9 @@ export function PrintBuilder({ cards }: { cards: SongCard[] }) {
     <main className="print-page">
       <div className="print-builder-controls">
         <header className="print-builder-header">
-          <Link className="print-back-link" href="/admin">
+          <Link className="print-back-link" href="/admin/songs">
             <ArrowLeft size={18} />
-            Card library
+            Songs
           </Link>
           <div>
             <span className="section-kicker">Print studio</span>

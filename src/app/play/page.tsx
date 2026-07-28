@@ -1,10 +1,5 @@
-import type { Metadata } from "next";
-import { Scanner } from "@/components/scanner";
-
-export const metadata: Metadata = {
-  title: "Play"
-};
+import { redirect } from "next/navigation";
 
 export default function PlayPage() {
-  return <Scanner />;
+  redirect("/kiosk");
 }

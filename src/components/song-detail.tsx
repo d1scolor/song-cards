@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ArrowLeft,
   CheckCircle2,
   LoaderCircle,
   Music2,
@@ -13,7 +12,7 @@ import type { SongCard } from "@/lib/types";
 
 type PlayState = "idle" | "starting" | "success" | "error";
 
-export function CardDetail({ card }: { card: SongCard }) {
+export function SongDetail({ song }: { song: SongCard }) {
   const [playState, setPlayState] = useState<PlayState>("idle");
   const [message, setMessage] = useState("");
 
@@ -24,14 +23,14 @@ export function CardDetail({ card }: { card: SongCard }) {
       const response = await fetch("/api/scan", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ markerId: card.markerId })
+        body: JSON.stringify({ markerId: song.markerId })
       });
       const body = await response.json();
       if (!response.ok) {
         throw new Error(body.error || "The song could not be started.");
       }
       setPlayState("success");
-      setMessage(`${card.title} is now playing.`);
+      setMessage(`${song.title} is now playing.`);
     } catch (error) {
       setPlayState("error");
       setMessage(
@@ -41,38 +40,31 @@ export function CardDetail({ card }: { card: SongCard }) {
   }
 
   return (
-    <main className="card-detail-page">
-      <nav className="card-detail-nav" aria-label="Card navigation">
-        <Link href="/cards" className="secondary-button">
-          <ArrowLeft size={20} aria-hidden="true" />
-          All cards
-        </Link>
-        <Link href="/control" className="text-link">
-          Player controls
-        </Link>
-      </nav>
-
+    <section className="song-detail-page">
+      <Link href="/library" className="song-detail-back">
+        ← Back to library
+      </Link>
       <article className="card-showcase">
         <div className="card-showcase__art">
-          {card.coverUrl ? (
+          {song.coverUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={card.coverUrl} alt={`${card.title} cover`} />
+            <img src={song.coverUrl} alt={`${song.title} cover`} />
           ) : (
             <Music2 size={96} aria-hidden="true" />
           )}
           <div className="card-showcase__marker">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={`/api/markers/${card.markerId}`}
-              alt={`Scannable marker for ${card.title}`}
+              src={`/api/markers/${song.markerId}`}
+              alt={`Scannable marker for ${song.title}`}
             />
           </div>
         </div>
 
         <div className="card-showcase__copy">
           <span className="section-kicker">Song card</span>
-          <h1>{card.title}</h1>
-          <p>{card.artist || "Unknown artist"}</p>
+          <h1>{song.title}</h1>
+          <p>{song.artist || "Unknown artist"}</p>
         </div>
 
         <button
@@ -105,6 +97,6 @@ export function CardDetail({ card }: { card: SongCard }) {
             "Or show the marker in the corner to the Song Cards scanner."}
         </p>
       </article>
-    </main>
+    </section>
   );
 }

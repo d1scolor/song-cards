@@ -25,7 +25,7 @@ export function AdminLogin() {
       setError(body.error ?? "Unable to sign in.");
       return;
     }
-    router.replace("/admin");
+    router.replace("/admin/songs");
     router.refresh();
   }
 

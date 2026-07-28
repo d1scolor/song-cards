@@ -7,10 +7,15 @@ playback.
 
 ## Interfaces
 
-- `/play` — child-facing camera scanner suitable for an iPad Home Screen app
-- `/control` — caregiver playback, state, and volume controls
-- `/admin` — protected song and optional cover upload, marker assignment, and
-  printable card sheet
+- `/kiosk` — child-facing camera scanner suitable for an iPad Home Screen app
+- `/library` — caregiver song browsing and direct playback
+- `/remote` — caregiver playback, state, and volume controls
+- `/admin/songs` — protected song upload, import, and marker assignment
+- `/admin/print` — protected printable card-sheet builder
+- `/admin/system` — protected OwnTone and yt-dlp status
+
+The former `/play`, `/cards`, and `/control` paths redirect to their new
+locations so existing bookmarks continue to work.
 
 Uploaded cover images are validated, resized, and stored as WebP files. They
 appear after a successful scan and in both playback control interfaces.
@@ -26,7 +31,7 @@ non-YouTube hosts, and unauthenticated import requests are rejected. Only
 import media you own or have permission to download.
 
 The scanner uses the `ARUCO_MIP_36h12` dictionary, which provides 250 marker
-identifiers. Marker numbers are never automatically reused.
+identifiers. Deleting a song releases its marker number for reuse.
 
 ## Local development
 
@@ -52,9 +57,10 @@ If yt-dlp is not on `PATH`, point the application to it with `YTDLP_PATH`.
 Open:
 
 ```text
-http://127.0.0.1:3000/play
-http://127.0.0.1:3000/control
-http://127.0.0.1:3000/admin
+http://127.0.0.1:3000/kiosk
+http://127.0.0.1:3000/library
+http://127.0.0.1:3000/remote
+http://127.0.0.1:3000/admin/songs
 ```
 
 `localhost` and `127.0.0.1` are accepted by browsers for camera development.
