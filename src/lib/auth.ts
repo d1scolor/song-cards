@@ -25,6 +25,35 @@ export function expectedSessionToken() {
     .digest("hex");
 }
 
+export function createKioskMediaToken(
+  songId: string,
+  expiresAt = Date.now() + 2 * 60 * 60 * 1_000
+) {
+  const expires = Math.floor(expiresAt);
+  const signature = crypto
+    .createHmac("sha256", sessionSecret())
+    .update(`song-cards-kiosk-media:${songId}:${expires}`)
+    .digest("hex");
+  return `${expires}.${signature}`;
+}
+
+export function verifyKioskMediaToken(songId: string, token: string) {
+  const separator = token.indexOf(".");
+  if (separator < 1) return false;
+  const expiresText = token.slice(0, separator);
+  const signature = token.slice(separator + 1);
+  if (!/^\d{13}$/.test(expiresText) || !/^[a-f0-9]{64}$/.test(signature)) {
+    return false;
+  }
+  const expires = Number.parseInt(expiresText, 10);
+  if (!Number.isFinite(expires) || expires < Date.now()) return false;
+  const expected = crypto
+    .createHmac("sha256", sessionSecret())
+    .update(`song-cards-kiosk-media:${songId}:${expires}`)
+    .digest("hex");
+  return safeEqual(signature, expected);
+}
+
 function safeEqual(left: string, right: string) {
   const a = Buffer.from(left);
   const b = Buffer.from(right);

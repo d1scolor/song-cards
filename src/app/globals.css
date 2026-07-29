@@ -94,7 +94,10 @@ h2,
     max(24px, env(safe-area-inset-left));
   overflow: hidden;
   overscroll-behavior: none;
-  touch-action: manipulation;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .kiosk-orb {
@@ -436,6 +439,17 @@ h2,
   box-shadow: 0 15px 30px rgba(221, 116, 8, 0.27);
   font-family: ui-rounded, "Avenir Next", Avenir, sans-serif;
   font-size: 1.32rem;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
+}
+
+.scan-button svg,
+.scan-button * {
+  pointer-events: none;
+  -webkit-user-drag: none;
 }
 
 .scan-button--cancel {
@@ -1030,6 +1044,71 @@ h2,
   margin-top: 26px;
 }
 
+.kiosk-target-settings {
+  margin: 0 0 24px;
+  padding: 0 0 24px;
+  border: 0;
+  border-bottom: 1px solid #e9e0d0;
+}
+
+.kiosk-target-settings legend {
+  padding: 0;
+  font-size: 1rem;
+  font-weight: 850;
+}
+
+.kiosk-target-settings > p {
+  margin: 5px 0 14px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.kiosk-target-settings > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.kiosk-target-settings label {
+  display: flex;
+  min-height: 86px;
+  margin: 0;
+  padding: 15px;
+  align-items: flex-start;
+  gap: 11px;
+  border: 1px solid #ddd2c2;
+  border-radius: 15px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.kiosk-target-settings label:has(input:checked) {
+  border-color: #63aaa4;
+  background: #eaf7f5;
+  box-shadow: 0 0 0 3px rgba(27, 140, 134, 0.1);
+}
+
+.kiosk-target-settings input {
+  width: 19px;
+  height: 19px;
+  margin: 2px 0 0;
+  flex: 0 0 auto;
+  accent-color: var(--teal);
+}
+
+.kiosk-target-settings span,
+.kiosk-target-settings small {
+  display: block;
+}
+
+.kiosk-target-settings small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-weight: 500;
+  line-height: 1.35;
+}
+
 .toggle-field {
   display: flex;
   margin-bottom: 22px;
@@ -1338,6 +1417,44 @@ h2,
   font-size: 0.9rem;
 }
 
+.song-tile__copy small {
+  margin-top: 4px;
+  color: var(--orange-dark);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.library-toolbar {
+  display: flex;
+  margin-bottom: 24px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.library-toolbar > span {
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 750;
+}
+
+.library-toolbar > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.library-toolbar .primary-button,
+.library-toolbar .secondary-button {
+  width: auto;
+  min-height: 48px;
+  padding: 10px 16px;
+  border-radius: 14px;
+  font-size: 0.82rem;
+}
+
 .library-empty {
   display: grid;
   min-height: 260px;
@@ -1467,6 +1584,120 @@ h2,
   grid-template-columns: minmax(0, 1.04fr) minmax(0, 0.96fr);
   align-items: start;
   gap: 24px;
+}
+
+.admin-create-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 24px;
+}
+
+.add-song-success {
+  display: flex;
+  margin: -8px 0 22px;
+  padding: 14px 16px;
+  align-items: center;
+  gap: 9px;
+  border-radius: 15px;
+  color: #176844;
+  background: #e6f6ed;
+  font-size: 0.88rem;
+  font-weight: 750;
+}
+
+.admin-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(380px, 1.1fr);
+  padding-bottom: 60px;
+  align-items: start;
+  gap: 24px;
+}
+
+.admin-song-detail {
+  padding-top: 18px;
+}
+
+.admin-song-detail .card-showcase {
+  width: 100%;
+  margin: 0;
+}
+
+.song-play-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.song-play-actions button {
+  min-height: 58px;
+}
+
+.playback-setup-panel .catalog-analysis {
+  margin-bottom: 18px;
+}
+
+.playback-setup-panel .song-tuning-form {
+  grid-template-columns: 1fr;
+}
+
+.delete-song-button {
+  display: inline-flex;
+  min-height: 46px;
+  margin-top: 26px;
+  padding: 0 14px;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 12px;
+  color: #9b3d33;
+  background: #fff0ed;
+  font-size: 0.8rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.playback-target {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 14px;
+  padding: 5px;
+  gap: 5px;
+  border: 1px solid rgba(126, 101, 56, 0.14);
+  border-radius: 16px;
+  background: rgba(255, 253, 248, 0.74);
+}
+
+.playback-target button {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 12px;
+  color: var(--muted);
+  background: transparent;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.playback-target button.is-active {
+  color: #12645f;
+  background: #dff3ef;
+}
+
+.local-chip {
+  color: #12645f;
+  background: #dff3ef;
+}
+
+.local-volume-note {
+  margin: 11px 0 0;
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.45;
+  text-align: center;
 }
 
 .admin-create-stack {
@@ -2644,6 +2875,26 @@ form input::placeholder {
     grid-template-columns: 1fr;
   }
 
+  .admin-create-grid,
+  .admin-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .library-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .library-toolbar > div {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .library-toolbar .primary-button,
+  .library-toolbar .secondary-button {
+    flex: 1;
+  }
+
   .admin-hero {
     align-items: flex-start;
     flex-direction: column;
@@ -2706,6 +2957,10 @@ form input::placeholder {
   }
 
   .loudness-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .kiosk-target-settings > div {
     grid-template-columns: 1fr;
   }
 
@@ -2873,11 +3128,20 @@ form input::placeholder {
     grid-column: 1 / -1;
     grid-row: 2;
     order: 3;
+    max-width: 100%;
+    overflow-x: auto;
+    justify-content: flex-start;
+    scrollbar-width: none;
   }
 
   .admin-nav a {
-    flex: 1;
+    flex: 0 0 auto;
     padding-inline: 8px;
+    white-space: nowrap;
+  }
+
+  .admin-nav::-webkit-scrollbar {
+    display: none;
   }
 
   .admin-actions {

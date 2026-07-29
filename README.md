@@ -1,22 +1,23 @@
 # Song Cards
 
 Song Cards is a small self-hosted web app that lets a child scan a printed
-ArUco marker and play its assigned song through an AirPlay receiver. The
-browser only scans the card; OwnTone running on the local Linux host owns audio
-playback.
+ArUco marker and play its assigned song through an AirPlay receiver. OwnTone
+running on the local Linux host owns shared speaker playback, while
+authenticated caregivers can optionally listen on their current browser.
 
 ## Interfaces
 
 - `/` — choice of kiosk or administrator interface
 - `/kiosk` — child-facing camera scanner suitable for an iPad Home Screen app
-- `/library` — caregiver song browsing and direct playback
-- `/remote` — caregiver playback, state, and volume controls
-- `/admin/songs` — protected song upload, import, and marker assignment
+- `/admin/now-playing` — protected OwnTone and local-device playback controls
+- `/admin/library` — protected browsing, playback, tuning, and song removal
+- `/admin/add` — protected audio upload and link import
 - `/admin/print` — protected printable card-sheet builder
 - `/admin/system` — protected OwnTone and yt-dlp status
 
-The former `/play`, `/cards`, and `/control` paths redirect to their new
-locations so existing bookmarks continue to work.
+The former `/play`, `/cards`, `/library`, `/remote`, `/control`, and
+`/admin/songs` paths redirect to their current locations so existing bookmarks
+continue to work.
 
 Uploaded cover images are validated, resized, and stored as WebP files. They
 appear after a successful scan and in both playback control interfaces.
@@ -34,15 +35,26 @@ have permission to download.
 
 New audio is measured with FFmpeg's EBU R128 analyzer. Song Cards keeps the
 caregiver's master volume stable and sends a compensated volume to OwnTone for
-each song. The targets and calibrated response curve can be adjusted under
+each song. The targets and response curve can be adjusted under
 `/admin/system`, while each song has a separate manual correction under
-`/admin/songs`. Existing libraries can be analyzed there with one button.
+`/admin/library`. Existing libraries can be analyzed there with one button.
 
 Start and end points are also stored as non-destructive song metadata. OwnTone
 seeks to the start when playback begins and Song Cards stops at the end during
 normal player polling. An authenticated administrator can set these points
-while listening on `/remote`; its seek slider is constrained to the configured
-playback window.
+while listening on `/admin/now-playing`; its seek slider is constrained to the
+configured playback window.
+
+Local-device playback streams the original stored audio through protected
+byte-range endpoints. It applies the same automatic and manual loudness
+correction and observes the same start/end metadata. Local state belongs to
+that browser tab and the device's hardware volume remains an additional final
+control.
+
+The kiosk target is selected under **System** without adding controls to the
+child-facing screen. When **This kiosk** is selected, the **Scan my card** tap
+also unlocks iOS audio before opening the camera; a successful scan then uses a
+short-lived signed audio URL and plays directly on that device.
 
 The scanner uses the `ARUCO_MIP_36h12` dictionary, which provides 250 marker
 identifiers. Deleting a song releases its marker number for reuse.
@@ -72,9 +84,9 @@ Open:
 
 ```text
 http://127.0.0.1:3000/
-http://127.0.0.1:3000/library
-http://127.0.0.1:3000/remote
-http://127.0.0.1:3000/admin/songs
+http://127.0.0.1:3000/admin/library
+http://127.0.0.1:3000/admin/now-playing
+http://127.0.0.1:3000/admin/add
 ```
 
 `localhost` and `127.0.0.1` are accepted by browsers for camera development.
@@ -130,6 +142,7 @@ LOUDNESS_COMPENSATION_ENABLED=true
 LOUDNESS_TARGET_LUFS=-16
 LOUDNESS_SHORT_TERM_TARGET_LUFS=-13.5
 VOLUME_CURVE_DIVISOR=74
+KIOSK_PLAYBACK_TARGET=owntone
 ```
 
 Use the `nightly` update channel temporarily when a YouTube change has not yet

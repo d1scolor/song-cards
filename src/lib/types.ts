@@ -54,6 +54,7 @@ export type LoudnessAnalysis = {
 
 export type PlaybackSettings = {
   masterVolume: number;
+  kioskPlaybackTarget: "owntone" | "local";
   loudnessCompensationEnabled: boolean;
   integratedTargetLufs: number;
   shortTermTargetLufs: number;

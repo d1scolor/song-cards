@@ -8,6 +8,6 @@ export const metadata: Metadata = {
 };
 
 export default async function LoginPage() {
-  if (await isAdminPage()) redirect("/admin/songs");
+  if (await isAdminPage()) redirect("/admin/now-playing");
   return <AdminLogin />;
 }

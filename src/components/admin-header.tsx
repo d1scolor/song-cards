@@ -1,10 +1,12 @@
 "use client";
 
 import {
+  AudioLines,
   FileMusic,
-  Library,
   LogOut,
   Printer,
+  Radio,
+  ScanLine,
   Settings,
   Wrench
 } from "lucide-react";
@@ -12,7 +14,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
 const adminLinks = [
-  { href: "/admin/songs", label: "Songs", icon: FileMusic },
+  { href: "/admin/now-playing", label: "Now Playing", icon: Radio },
+  { href: "/admin/library", label: "Library", icon: AudioLines },
+  { href: "/admin/add", label: "Add Songs", icon: FileMusic },
   { href: "/admin/print", label: "Print", icon: Printer },
   { href: "/admin/system", label: "System", icon: Wrench }
 ];
@@ -29,7 +33,7 @@ export function AdminHeader() {
 
   return (
     <header className="admin-navigation">
-      <Link href="/admin/songs" className="dashboard-brand">
+      <Link href="/admin/now-playing" className="dashboard-brand">
         <span className="brand-mark" aria-hidden="true">
           <Settings size={24} />
         </span>
@@ -51,9 +55,9 @@ export function AdminHeader() {
         ))}
       </nav>
       <div className="admin-actions">
-        <Link href="/library" title="Back to library">
-          <Library size={19} aria-hidden="true" />
-          <span>Library</span>
+        <Link href="/kiosk" title="Open kiosk">
+          <ScanLine size={19} aria-hidden="true" />
+          <span>Kiosk</span>
         </Link>
         <button type="button" title="Sign out" onClick={() => void logout()}>
           <LogOut size={19} aria-hidden="true" />

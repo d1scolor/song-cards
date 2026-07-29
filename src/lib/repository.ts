@@ -302,6 +302,7 @@ export function saveSongAnalysis(
 
 const settingDefaults: PlaybackSettings = {
   masterVolume: Math.min(config.defaultVolume, config.maxVolume),
+  kioskPlaybackTarget: config.kioskPlaybackTarget,
   loudnessCompensationEnabled: config.loudnessCompensationEnabled,
   integratedTargetLufs: config.integratedTargetLufs,
   shortTermTargetLufs: config.shortTermTargetLufs,
@@ -310,6 +311,7 @@ const settingDefaults: PlaybackSettings = {
 
 const settingKeys = {
   masterVolume: "playback.master_volume",
+  kioskPlaybackTarget: "playback.kiosk_target",
   loudnessCompensationEnabled: "loudness.enabled",
   integratedTargetLufs: "loudness.integrated_target_lufs",
   shortTermTargetLufs: "loudness.short_term_target_lufs",
@@ -337,6 +339,10 @@ export function getPlaybackSettings(): PlaybackSettings {
         numberSetting("masterVolume", settingDefaults.masterVolume)
       )
     ),
+    kioskPlaybackTarget:
+      values.get(settingKeys.kioskPlaybackTarget) === "local"
+        ? "local"
+        : settingDefaults.kioskPlaybackTarget,
     loudnessCompensationEnabled:
       values.get(settingKeys.loudnessCompensationEnabled) === undefined
         ? settingDefaults.loudnessCompensationEnabled

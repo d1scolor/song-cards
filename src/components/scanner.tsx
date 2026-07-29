@@ -10,6 +10,11 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  LocalPlayerControls,
+  type LocalPlaybackTrack,
+  useLocalPlayback
+} from "@/components/local-playback";
 import { PlayerControls } from "@/components/player-controls";
 import type { PlayerStatus } from "@/lib/types";
 
@@ -20,7 +25,14 @@ type ScannedSong = {
   coverUrl: string | null;
 };
 
-export function Scanner({ showAdminExit = false }: { showAdminExit?: boolean }) {
+export function Scanner({
+  showAdminExit = false,
+  initialPlaybackTarget = "owntone"
+}: {
+  showAdminExit?: boolean;
+  initialPlaybackTarget?: "owntone" | "local";
+}) {
+  const localPlayer = useLocalPlayback();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -31,11 +43,31 @@ export function Scanner({ showAdminExit = false }: { showAdminExit?: boolean }) 
   const candidateRef = useRef<{ id: number; seen: number } | null>(null);
   const processingRef = useRef(false);
   const lastFrameRef = useRef(0);
+  const playbackWasActiveRef = useRef(false);
+  const localPlaybackWasActiveRef = useRef(false);
+  const stageRef = useRef<ScanStage>("idle");
   const [stage, setStage] = useState<ScanStage>("idle");
   const [message, setMessage] = useState("Pick a card and tap the button.");
   const [lastSong, setLastSong] = useState<ScannedSong | null>(null);
+  const [playbackTarget, setPlaybackTarget] = useState(initialPlaybackTarget);
 
   const syncPlayerSong = useCallback((status: PlayerStatus) => {
+    if (status.state === "stop") {
+      if (playbackWasActiveRef.current) {
+        playbackWasActiveRef.current = false;
+        if (
+          ["opening", "scanning", "starting"].includes(stageRef.current)
+        ) {
+          return;
+        }
+        setLastSong(null);
+        setStage("idle");
+        setMessage("Pick a card and tap the button.");
+      }
+      return;
+    }
+    playbackWasActiveRef.current = true;
+    if (["opening", "scanning", "starting"].includes(stageRef.current)) return;
     const song = status.song;
     if (!song) return;
     setLastSong((current) => {
@@ -59,6 +91,24 @@ export function Scanner({ showAdminExit = false }: { showAdminExit?: boolean }) 
     });
   }, []);
 
+  useEffect(() => {
+    stageRef.current = stage;
+  }, [stage]);
+
+  useEffect(() => {
+    if (playbackTarget !== "local" || !localPlayer.track) return;
+    if (["loading", "play", "pause"].includes(localPlayer.state)) {
+      localPlaybackWasActiveRef.current = true;
+      return;
+    }
+    if (localPlayer.state === "stop" && localPlaybackWasActiveRef.current) {
+      localPlaybackWasActiveRef.current = false;
+      setLastSong(null);
+      setStage("idle");
+      setMessage("Pick a card and tap the button.");
+    }
+  }, [localPlayer.state, localPlayer.track, playbackTarget]);
+
   const stopCamera = useCallback(() => {
     if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
     frameRef.current = null;
@@ -68,6 +118,21 @@ export function Scanner({ showAdminExit = false }: { showAdminExit?: boolean }) 
   }, []);
 
   useEffect(() => stopCamera, [stopCamera]);
+
+  useEffect(() => {
+    const preventTouchMove = (event: TouchEvent) => {
+      if (event.cancelable) event.preventDefault();
+    };
+    const preventDrag = (event: DragEvent) => event.preventDefault();
+    document.addEventListener("touchmove", preventTouchMove, {
+      passive: false
+    });
+    document.addEventListener("dragstart", preventDrag);
+    return () => {
+      document.removeEventListener("touchmove", preventTouchMove);
+      document.removeEventListener("dragstart", preventDrag);
+    };
+  }, []);
 
   const submitMarker = useCallback(
     async (markerId: number) => {
@@ -84,6 +149,15 @@ export function Scanner({ showAdminExit = false }: { showAdminExit?: boolean }) 
         });
         const body = await response.json();
         if (!response.ok) throw new Error(body.error || "That card did not work.");
+        if (body.playbackTarget === "local" && body.localPlayback) {
+          setPlaybackTarget("local");
+          await localPlayer.playTrack(
+            body.localPlayback as LocalPlaybackTrack
+          );
+        } else {
+          if (localPlayer.track) localPlayer.stop();
+          setPlaybackTarget("owntone");
+        }
         setLastSong({
           id: body.song.id ?? null,
           title: body.song.title,
@@ -100,7 +174,7 @@ export function Scanner({ showAdminExit = false }: { showAdminExit?: boolean }) 
         processingRef.current = false;
       }
     },
-    [stopCamera]
+    [localPlayer, stopCamera]
   );
 
   function scanFrame(time: number) {
@@ -140,6 +214,7 @@ export function Scanner({ showAdminExit = false }: { showAdminExit?: boolean }) 
   }
 
   async function startCamera() {
+    void localPlayer.unlock();
     setStage("opening");
     setMessage("Opening the camera…");
     setLastSong(null);
@@ -213,7 +288,7 @@ export function Scanner({ showAdminExit = false }: { showAdminExit?: boolean }) 
           <span className="brand-subtitle">Pick · Scan · Listen</span>
         </div>
         {showAdminExit && (
-          <Link className="kiosk-admin-exit" href="/admin/songs">
+          <Link className="kiosk-admin-exit" href="/admin/now-playing">
             <LogOut size={18} aria-hidden="true" />
             Exit kiosk
           </Link>
@@ -299,6 +374,7 @@ export function Scanner({ showAdminExit = false }: { showAdminExit?: boolean }) 
           <button
             className="scan-button scan-button--cancel"
             type="button"
+            draggable={false}
             onClick={() => {
               stopCamera();
               setStage("idle");
@@ -312,6 +388,7 @@ export function Scanner({ showAdminExit = false }: { showAdminExit?: boolean }) 
           <button
             className="scan-button"
             type="button"
+            draggable={false}
             disabled={stage === "starting"}
             onClick={() => void startCamera()}
           >
@@ -325,7 +402,11 @@ export function Scanner({ showAdminExit = false }: { showAdminExit?: boolean }) 
         )}
       </section>
 
-      <PlayerControls compact onStatus={syncPlayerSong} />
+      {playbackTarget === "local" ? (
+        <LocalPlayerControls compact />
+      ) : (
+        <PlayerControls compact onStatus={syncPlayerSong} />
+      )}
     </main>
   );
 }

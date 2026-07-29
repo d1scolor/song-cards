@@ -112,6 +112,7 @@ test("persists global loudness settings and song playback metadata", () => {
   assert.equal(updated?.integratedLufs, -20);
 
   updatePlaybackSettings({
+    kioskPlaybackTarget: "local",
     loudnessCompensationEnabled: false,
     integratedTargetLufs: -17,
     shortTermTargetLufs: -14,
@@ -119,6 +120,7 @@ test("persists global loudness settings and song playback metadata", () => {
   });
   assert.deepEqual(getPlaybackSettings(), {
     masterVolume: 35,
+    kioskPlaybackTarget: "local",
     loudnessCompensationEnabled: false,
     integratedTargetLufs: -17,
     shortTermTargetLufs: -14,

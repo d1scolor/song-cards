@@ -20,6 +20,10 @@ export const config = {
   dataDirectory: process.env.DATA_DIR ?? path.join(process.cwd(), "data"),
   defaultVolume: integerFromEnv("DEFAULT_VOLUME", 35),
   maxVolume: integerFromEnv("MAX_VOLUME", 65),
+  kioskPlaybackTarget:
+    process.env.KIOSK_PLAYBACK_TARGET === "local"
+      ? ("local" as const)
+      : ("owntone" as const),
   loudnessCompensationEnabled: booleanFromEnv(
     "LOUDNESS_COMPENSATION_ENABLED",
     true

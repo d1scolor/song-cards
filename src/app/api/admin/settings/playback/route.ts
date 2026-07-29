@@ -8,6 +8,7 @@ import {
 } from "@/lib/repository";
 
 const settingsSchema = z.object({
+  kioskPlaybackTarget: z.enum(["owntone", "local"]),
   loudnessCompensationEnabled: z.boolean(),
   integratedTargetLufs: z.number().min(-24).max(-8),
   shortTermTargetLufs: z.number().min(-20).max(-5),

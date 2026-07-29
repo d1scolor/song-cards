@@ -20,7 +20,7 @@ export default async function Home() {
           </Link>
           <Link
             className="landing-choice landing-choice--admin"
-            href={isAdmin ? "/admin/songs" : "/admin/login"}
+            href={isAdmin ? "/admin/now-playing" : "/admin/login"}
           >
             <span>
               <Settings size={34} aria-hidden="true" />

@@ -9,6 +9,7 @@ import type { PlaybackSettings } from "@/lib/types";
 
 const settings: PlaybackSettings = {
   masterVolume: 40,
+  kioskPlaybackTarget: "owntone",
   loudnessCompensationEnabled: true,
   integratedTargetLufs: -16,
   shortTermTargetLufs: -13.5,

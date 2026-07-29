@@ -55,7 +55,7 @@ export function SystemDashboard() {
     if (response.ok) setDownloader(body.status);
   }
 
-  async function saveLoudnessSettings() {
+  async function savePlaybackSettings() {
     if (!settings) return;
     setSavingSettings(true);
     setSettingsMessage("");
@@ -67,11 +67,11 @@ export function SystemDashboard() {
     const body = await response.json();
     setSavingSettings(false);
     if (!response.ok) {
-      setSettingsMessage(body.error ?? "Unable to save loudness settings.");
+      setSettingsMessage(body.error ?? "Unable to save playback settings.");
       return;
     }
     setSettings(body.settings);
-    setSettingsMessage("Loudness settings saved.");
+    setSettingsMessage("Playback settings saved.");
   }
 
   return (
@@ -212,12 +212,57 @@ export function SystemDashboard() {
               <SlidersHorizontal size={26} aria-hidden="true" />
             </span>
             <div>
-              <span className="section-kicker">Loudness</span>
-              <h2>Song compensation</h2>
+              <span className="section-kicker">Playback</span>
+              <h2>Kiosk and song balancing</h2>
             </div>
           </div>
           {settings && (
             <div className="loudness-settings">
+              <fieldset className="kiosk-target-settings">
+                <legend>Kiosk playback target</legend>
+                <p>
+                  Choose where scanned cards play. The kiosk itself stays
+                  child-friendly and shows no target switch.
+                </p>
+                <div>
+                  <label>
+                    <input
+                      type="radio"
+                      name="kioskPlaybackTarget"
+                      value="owntone"
+                      checked={settings.kioskPlaybackTarget === "owntone"}
+                      onChange={() =>
+                        setSettings({
+                          ...settings,
+                          kioskPlaybackTarget: "owntone"
+                        })
+                      }
+                    />
+                    <span>
+                      <strong>OwnTone speaker</strong>
+                      <small>Play through the configured AirPlay output.</small>
+                    </span>
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="kioskPlaybackTarget"
+                      value="local"
+                      checked={settings.kioskPlaybackTarget === "local"}
+                      onChange={() =>
+                        setSettings({
+                          ...settings,
+                          kioskPlaybackTarget: "local"
+                        })
+                      }
+                    />
+                    <span>
+                      <strong>This kiosk</strong>
+                      <small>Play directly through the iPhone or iPad.</small>
+                    </span>
+                  </label>
+                </div>
+              </fieldset>
               <label className="toggle-field">
                 <input
                   type="checkbox"
@@ -232,8 +277,8 @@ export function SystemDashboard() {
                 <span>
                   <strong>Automatically balance songs</strong>
                   <small>
-                    Keep the master volume familiar while adjusting OwnTone per
-                    song.
+                    Keep the master volume familiar while adjusting either
+                    playback target per song.
                   </small>
                 </span>
               </label>
@@ -299,9 +344,9 @@ export function SystemDashboard() {
                 </label>
               </div>
               <p className="system-message">
-                Defaults are calibrated from your listening tests: −16 LUFS,
-                −13.5 LUFS for louder sections, and a divisor of 74. Changes
-                apply on the next song or volume adjustment.
+                Targets control automatic song balancing. The curve controls
+                how strongly gain corrections change the playback volume.
+                Changes apply on the next song or volume adjustment.
               </p>
               {settingsMessage && (
                 <p className="settings-result" aria-live="polite">
@@ -312,9 +357,9 @@ export function SystemDashboard() {
                 className="secondary-button system-update"
                 type="button"
                 disabled={savingSettings}
-                onClick={() => void saveLoudnessSettings()}
+                onClick={() => void savePlaybackSettings()}
               >
-                {savingSettings ? "Saving…" : "Save loudness settings"}
+                {savingSettings ? "Saving…" : "Save playback settings"}
               </button>
             </div>
           )}
