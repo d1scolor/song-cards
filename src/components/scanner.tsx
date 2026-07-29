@@ -1,6 +1,14 @@
 "use client";
 
-import { Camera, CameraOff, Check, Music2, RefreshCw } from "lucide-react";
+import {
+  Camera,
+  CameraOff,
+  Check,
+  LogOut,
+  Music2,
+  RefreshCw
+} from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PlayerControls } from "@/components/player-controls";
 import type { PlayerStatus } from "@/lib/types";
@@ -12,7 +20,7 @@ type ScannedSong = {
   coverUrl: string | null;
 };
 
-export function Scanner() {
+export function Scanner({ showAdminExit = false }: { showAdminExit?: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -204,6 +212,12 @@ export function Scanner() {
           <span className="brand-name">Song Cards</span>
           <span className="brand-subtitle">Pick · Scan · Listen</span>
         </div>
+        {showAdminExit && (
+          <Link className="kiosk-admin-exit" href="/admin/songs">
+            <LogOut size={18} aria-hidden="true" />
+            Exit kiosk
+          </Link>
+        )}
       </header>
 
       <section className="scanner-stage" aria-live="polite">

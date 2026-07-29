@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
   const parsed = importSchema.safeParse(await request.json());
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Enter a YouTube link and a valid marker number." },
+      { error: "Enter a supported media link and a valid marker number." },
       { status: 400 }
     );
   }

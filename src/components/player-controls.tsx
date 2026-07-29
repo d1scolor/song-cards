@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Brackets,
   CirclePause,
   CirclePlay,
   Square,
@@ -18,13 +19,18 @@ function formatTime(milliseconds: number) {
 
 export function PlayerControls({
   compact = false,
-  onStatus
+  onStatus,
+  allowTrimEditing = false
 }: {
   compact?: boolean;
   onStatus?: (status: PlayerStatus) => void;
+  allowTrimEditing?: boolean;
 }) {
   const [status, setStatus] = useState<PlayerStatus | null>(null);
   const [busy, setBusy] = useState(false);
+  const [trimMessage, setTrimMessage] = useState("");
+  const [seeking, setSeeking] = useState(false);
+  const [seekPreviewMs, setSeekPreviewMs] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -38,9 +44,13 @@ export function PlayerControls({
         connected: false,
         state: "stop",
         volume: 0,
+        maxVolume: 100,
+        effectiveVolume: 0,
         progressMs: 0,
         durationMs: 0,
         song: null,
+        trim: null,
+        compensation: null,
         message: "The music server is unavailable."
       });
     }
@@ -59,6 +69,7 @@ export function PlayerControls({
     input:
       | { action: "play" | "pause" | "stop" }
       | { action: "volume"; volume: number }
+      | { action: "seek"; positionMs: number }
   ) {
     setBusy(true);
     try {
@@ -76,10 +87,71 @@ export function PlayerControls({
     }
   }
 
+  async function setPlaybackPoint(
+    point: "startMs" | "endMs",
+    value: number | null
+  ) {
+    if (!status?.song) return;
+    setBusy(true);
+    setTrimMessage("");
+    try {
+      const response = await fetch(
+        `/api/admin/catalog/${encodeURIComponent(status.song.id)}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ [point]: value })
+        }
+      );
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error);
+      setStatus((current) =>
+        current
+          ? {
+              ...current,
+              trim: {
+                startMs: body.song.startMs,
+                endMs: body.song.endMs
+              }
+            }
+          : current
+      );
+      setTrimMessage(
+        value === null
+          ? "Ending point cleared."
+          : `${point === "startMs" ? "Start" : "End"} set to ${formatTime(value)}.`
+      );
+    } catch (error) {
+      setTrimMessage(
+        error instanceof Error ? error.message : "Unable to set playback point."
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const progress =
     status?.durationMs && status.durationMs > 0
       ? Math.min(100, (status.progressMs / status.durationMs) * 100)
       : 0;
+  const displayedProgressMs = seeking
+    ? seekPreviewMs
+    : (status?.progressMs ?? 0);
+  const seekMinimum = status?.trim?.startMs ?? 0;
+  const seekMaximum =
+    status?.trim?.endMs ?? status?.durationMs ?? seekMinimum;
+  const seekProgress =
+    seekMaximum > seekMinimum
+      ? Math.min(
+          100,
+          Math.max(
+            0,
+            ((displayedProgressMs - seekMinimum) /
+              (seekMaximum - seekMinimum)) *
+              100
+          )
+        )
+      : progress;
 
   return (
     <section className={`player-panel ${compact ? "player-panel--compact" : ""}`}>
@@ -123,11 +195,48 @@ export function PlayerControls({
 
       {!compact && (
         <div className="progress-row">
-          <span>{formatTime(status?.progressMs ?? 0)}</span>
-          <div className="progress-track" aria-hidden="true">
-            <span style={{ width: `${progress}%` }} />
+          <span>{formatTime(displayedProgressMs)}</span>
+          <div
+            className="progress-track progress-track--seekable"
+            style={{ "--seek-progress": `${seekProgress}%` } as React.CSSProperties}
+          >
+            <input
+              aria-label="Song position"
+              type="range"
+              min={seekMinimum}
+              max={Math.max(seekMinimum, seekMaximum)}
+              step="250"
+              value={Math.max(
+                seekMinimum,
+                Math.min(seekMaximum, displayedProgressMs)
+              )}
+              disabled={
+                busy ||
+                !status?.song ||
+                status.durationMs <= 0 ||
+                seekMaximum <= seekMinimum
+              }
+              onPointerDown={() => {
+                setSeeking(true);
+                setSeekPreviewMs(status?.progressMs ?? seekMinimum);
+              }}
+              onChange={(event) => {
+                setSeeking(true);
+                setSeekPreviewMs(Number(event.target.value));
+              }}
+              onPointerUp={(event) => {
+                const positionMs = Number(event.currentTarget.value);
+                setSeeking(false);
+                void action({ action: "seek", positionMs });
+              }}
+              onKeyUp={(event) => {
+                const positionMs = Number(event.currentTarget.value);
+                setSeeking(false);
+                void action({ action: "seek", positionMs });
+              }}
+            />
           </div>
-          <span>{formatTime(status?.durationMs ?? 0)}</span>
+          <span>{formatTime(seekMaximum)}</span>
         </div>
       )}
 
@@ -171,7 +280,7 @@ export function PlayerControls({
             aria-label="Speaker volume"
             type="range"
             min="0"
-            max="100"
+            max={status?.maxVolume ?? 100}
             value={status?.volume ?? 0}
             disabled={busy || !status?.connected}
             onChange={(event) => {
@@ -195,6 +304,54 @@ export function PlayerControls({
           />
           <Volume2 size={24} aria-hidden="true" />
           <output>{status?.volume ?? 0}%</output>
+        </div>
+      )}
+
+      {!compact && allowTrimEditing && status?.song && (
+        <div className="trim-controls">
+          <div className="trim-controls__heading">
+            <Brackets size={19} aria-hidden="true" />
+            <span>Edit this song while listening</span>
+          </div>
+          <div className="trim-controls__buttons">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                void setPlaybackPoint("startMs", status.progressMs)
+              }
+            >
+              Set start here
+              <small>{formatTime(status.trim?.startMs ?? 0)}</small>
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void setPlaybackPoint("endMs", status.progressMs)}
+            >
+              Set end here
+              <small>
+                {status.trim?.endMs
+                  ? formatTime(status.trim.endMs)
+                  : "Full song"}
+              </small>
+            </button>
+            {status.trim?.endMs != null && (
+              <button
+                className="trim-clear"
+                type="button"
+                disabled={busy}
+                onClick={() => void setPlaybackPoint("endMs", null)}
+              >
+                Clear end
+              </button>
+            )}
+          </div>
+          {trimMessage && (
+            <p className="trim-message" aria-live="polite">
+              {trimMessage}
+            </p>
+          )}
         </div>
       )}
 

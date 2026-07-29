@@ -33,6 +33,15 @@ export function getDatabase() {
       original_name TEXT NOT NULL,
       mime_type TEXT NOT NULL,
       cover_filename TEXT,
+      duration_ms INTEGER NOT NULL DEFAULT 0,
+      integrated_lufs REAL,
+      short_term_p95_lufs REAL,
+      loudness_range_lu REAL,
+      analyzed_at TEXT,
+      analysis_error TEXT,
+      manual_gain_db REAL NOT NULL DEFAULT 0,
+      start_ms INTEGER NOT NULL DEFAULT 0,
+      end_ms INTEGER,
       created_at TEXT NOT NULL
     );
 
@@ -44,6 +53,11 @@ export function getDatabase() {
     );
 
     CREATE INDEX IF NOT EXISTS markers_song_id_idx ON markers(song_id);
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
   `);
 
   // Releases markers orphaned by versions that retained marker rows after
@@ -56,6 +70,23 @@ export function getDatabase() {
 
   if (!songColumns.some((column) => column.name === "cover_filename")) {
     next.exec("ALTER TABLE songs ADD COLUMN cover_filename TEXT");
+  }
+
+  const songMigrations = [
+    ["duration_ms", "INTEGER NOT NULL DEFAULT 0"],
+    ["integrated_lufs", "REAL"],
+    ["short_term_p95_lufs", "REAL"],
+    ["loudness_range_lu", "REAL"],
+    ["analyzed_at", "TEXT"],
+    ["analysis_error", "TEXT"],
+    ["manual_gain_db", "REAL NOT NULL DEFAULT 0"],
+    ["start_ms", "INTEGER NOT NULL DEFAULT 0"],
+    ["end_ms", "INTEGER"]
+  ] as const;
+  for (const [name, definition] of songMigrations) {
+    if (!songColumns.some((column) => column.name === name)) {
+      next.exec(`ALTER TABLE songs ADD COLUMN ${name} ${definition}`);
+    }
   }
 
   database = next;

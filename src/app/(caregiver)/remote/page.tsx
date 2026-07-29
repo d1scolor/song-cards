@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import { PlayerControls } from "@/components/player-controls";
+import { isAdminPage } from "@/lib/auth";
 
 export const metadata: Metadata = {
   title: "Now Playing"
 };
 
-export default function RemotePage() {
+export default async function RemotePage() {
+  const isAdmin = await isAdminPage();
   return (
     <main className="remote-page">
       <section className="control-hero">
@@ -13,7 +15,7 @@ export default function RemotePage() {
         <h1>The room is yours.</h1>
         <p>See what is playing and adjust it without interrupting the kiosk.</p>
       </section>
-      <PlayerControls />
+      <PlayerControls allowTrimEditing={isAdmin} />
     </main>
   );
 }

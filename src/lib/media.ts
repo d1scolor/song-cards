@@ -8,6 +8,8 @@ import {
   ensureStorageDirectories,
   mediaDirectory
 } from "@/lib/db";
+import { analyzeAudioLoudness } from "@/lib/loudness";
+import type { LoudnessAnalysis } from "@/lib/types";
 
 type ProbeStream = {
   codec_name?: string;
@@ -139,6 +141,9 @@ export async function storeAudioFile(
   filename: string;
   mimeType: string;
   normalized: boolean;
+  durationMs: number;
+  analysis: LoudnessAnalysis | null;
+  analysisError: string | null;
 }> {
   ensureStorageDirectories();
   const probe = await probeAudio(sourcePath);
@@ -195,10 +200,22 @@ export async function storeAudioFile(
     );
   }
 
+  let analysis: LoudnessAnalysis | null = null;
+  let analysisError: string | null = null;
+  try {
+    analysis = await analyzeAudioLoudness(target);
+  } catch (error) {
+    analysisError =
+      error instanceof Error ? error.message : "Loudness analysis failed.";
+  }
+
   return {
     filename,
     mimeType: mimeTypes[extension] ?? "application/octet-stream",
-    normalized: !direct
+    normalized: !direct,
+    durationMs: Math.max(0, Math.round(probe.durationSeconds * 1_000)),
+    analysis,
+    analysisError
   };
 }
 

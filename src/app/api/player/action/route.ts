@@ -4,7 +4,11 @@ import { playerAction } from "@/lib/playback";
 
 const actionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.enum(["play", "pause", "stop"]) }),
-  z.object({ action: z.literal("volume"), volume: z.number().min(0).max(100) })
+  z.object({ action: z.literal("volume"), volume: z.number().min(0).max(100) }),
+  z.object({
+    action: z.literal("seek"),
+    positionMs: z.number().int().min(0)
+  })
 ]);
 
 export async function POST(request: Request) {

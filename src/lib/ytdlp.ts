@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { CommandError, runCommand } from "@/lib/command";
@@ -275,26 +276,68 @@ export function updateYtDlp() {
   });
 }
 
+function isPrivateIpv4(hostname: string) {
+  const parts = hostname.split(".").map(Number);
+  const [first, second] = parts;
+  return (
+    first === 0 ||
+    first === 10 ||
+    first === 127 ||
+    (first === 169 && second === 254) ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168) ||
+    first >= 224
+  );
+}
+
+function isPrivateHostname(hostname: string) {
+  const normalized = hostname
+    .toLowerCase()
+    .replace(/\.$/, "")
+    .replace(/^\[|\]$/g, "");
+  if (
+    normalized === "localhost" ||
+    normalized.endsWith(".localhost") ||
+    normalized.endsWith(".local")
+  ) {
+    return true;
+  }
+  const ipVersion = net.isIP(normalized);
+  if (ipVersion === 4) return isPrivateIpv4(normalized);
+  if (ipVersion === 6) {
+    const compact = normalized;
+    return (
+      compact === "::" ||
+      compact === "::1" ||
+      compact.startsWith("fc") ||
+      compact.startsWith("fd") ||
+      compact.startsWith("fe8") ||
+      compact.startsWith("fe9") ||
+      compact.startsWith("fea") ||
+      compact.startsWith("feb")
+    );
+  }
+  return false;
+}
+
 export function validateYouTubeUrl(input: string) {
   let url: URL;
   try {
     url = new URL(input.trim());
   } catch {
-    throw new YouTubeUrlError("Enter a valid YouTube URL.");
+    throw new YouTubeUrlError("Enter a valid media URL.");
   }
   const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
-  const youtubeHost =
-    hostname === "youtu.be" ||
-    hostname === "youtube.com" ||
-    hostname.endsWith(".youtube.com");
   if (
     url.protocol !== "https:" ||
-    !youtubeHost ||
+    !hostname ||
+    isPrivateHostname(hostname) ||
+    (url.port !== "" && url.port !== "443") ||
     url.username ||
     url.password
   ) {
     throw new YouTubeUrlError(
-      "Only public HTTPS YouTube and youtu.be links are supported."
+      "Use a public HTTPS link without credentials or a custom port."
     );
   }
   return url.toString();
@@ -492,7 +535,10 @@ async function runImport(
         filename: storedAudio.filename,
         originalName: `${title}${path.extname(files.audioPath)}`,
         mimeType: storedAudio.mimeType,
-        coverFilename: storedCover?.coverFilename ?? null
+        coverFilename: storedCover?.coverFilename ?? null,
+        durationMs: storedAudio.durationMs,
+        analysis: storedAudio.analysis,
+        analysisError: storedAudio.analysisError
       });
     } catch (error) {
       if (error instanceof Error && error.message.includes("UNIQUE")) {
@@ -546,7 +592,7 @@ export function startYouTubeImport(input: {
     const active = importJobs.get(activeId);
     if (active && !["complete", "error"].includes(active.stage)) {
       throw new ImportBusyError(
-        "Another YouTube song is already being imported."
+        "Another song is already being imported."
       );
     }
   }

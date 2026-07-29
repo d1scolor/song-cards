@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import { SongManager } from "@/components/song-manager";
-import { listSongCards, nextMarkerId } from "@/lib/repository";
+import {
+  getPlaybackSettings,
+  listSongCards,
+  nextMarkerId
+} from "@/lib/repository";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +17,7 @@ export default function AdminSongsPage() {
     <SongManager
       initialSongs={listSongCards()}
       initialNextMarker={nextMarkerId()}
+      initialPlaybackSettings={getPlaybackSettings()}
     />
   );
 }

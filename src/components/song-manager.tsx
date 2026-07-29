@@ -5,25 +5,41 @@ import {
   Download,
   FileMusic,
   ImagePlus,
+  AudioLines,
   Plus,
   Printer,
   RefreshCw,
   TriangleAlert,
-  Trash2
+  Trash2,
+  SlidersHorizontal
 } from "lucide-react";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import type { SongCard, YouTubeImportJob } from "@/lib/types";
+import type {
+  PlaybackSettings,
+  SongCard,
+  YouTubeImportJob
+} from "@/lib/types";
+
+function formatSeconds(milliseconds: number | null) {
+  if (milliseconds === null) return "";
+  return (milliseconds / 1_000).toFixed(3).replace(/\.?0+$/, "");
+}
 
 export function SongManager({
   initialSongs,
-  initialNextMarker
+  initialNextMarker,
+  initialPlaybackSettings
 }: {
   initialSongs: SongCard[];
   initialNextMarker: number;
+  initialPlaybackSettings: PlaybackSettings;
 }) {
   const [songs, setSongs] = useState(initialSongs);
   const [nextMarker, setNextMarker] = useState(initialNextMarker);
+  const [playbackSettings, setPlaybackSettings] = useState(
+    initialPlaybackSettings
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [fileName, setFileName] = useState("");
@@ -31,6 +47,8 @@ export function SongManager({
   const [importUrl, setImportUrl] = useState("");
   const [importJob, setImportJob] = useState<YouTubeImportJob | null>(null);
   const [importError, setImportError] = useState("");
+  const [busySongId, setBusySongId] = useState("");
+  const [analysisProgress, setAnalysisProgress] = useState("");
 
   const refreshCatalog = useCallback(async () => {
     const response = await fetch("/api/admin/catalog", { cache: "no-store" });
@@ -38,6 +56,7 @@ export function SongManager({
     const body = await response.json();
     setSongs(body.cards);
     setNextMarker(body.nextMarkerId);
+    if (body.playbackSettings) setPlaybackSettings(body.playbackSettings);
   }, []);
 
   useEffect(() => {
@@ -130,6 +149,103 @@ export function SongManager({
       return;
     }
     setSongs((current) => current.filter((item) => item.id !== song.id));
+  }
+
+  async function saveSongPlayback(
+    event: FormEvent<HTMLFormElement>,
+    song: SongCard
+  ) {
+    event.preventDefault();
+    setBusySongId(song.id);
+    setError("");
+    const form = new FormData(event.currentTarget);
+    const endValue = String(form.get("endSeconds") ?? "").trim();
+    const response = await fetch(`/api/admin/catalog/${song.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        manualGainDb: Number(form.get("manualGainDb")),
+        startMs: Math.round(Number(form.get("startSeconds")) * 1_000),
+        endMs: endValue ? Math.round(Number(endValue) * 1_000) : null
+      })
+    });
+    const body = await response.json();
+    setBusySongId("");
+    if (!response.ok) {
+      setError(body.error ?? "Unable to save playback settings.");
+      return;
+    }
+    setSongs((current) =>
+      current.map((item) =>
+        item.id === song.id ? { ...item, ...body.song } : item
+      )
+    );
+  }
+
+  async function analyzeSong(song: SongCard) {
+    setBusySongId(song.id);
+    setError("");
+    const response = await fetch(`/api/admin/catalog/${song.id}/analyze`, {
+      method: "POST"
+    });
+    const body = await response.json();
+    setBusySongId("");
+    if (!response.ok) {
+      setError(body.error ?? "Unable to analyze the song.");
+      return;
+    }
+    setSongs((current) =>
+      current.map((item) =>
+        item.id === song.id ? { ...item, ...body.song } : item
+      )
+    );
+  }
+
+  async function analyzeExistingSongs() {
+    const pending = songs.filter((song) => song.integratedLufs === null);
+    if (pending.length === 0) return;
+    setBusySongId("bulk-analysis");
+    setError("");
+    for (let index = 0; index < pending.length; index += 1) {
+      const song = pending[index];
+      setAnalysisProgress(
+        `Analyzing ${index + 1} of ${pending.length}: ${song.title}`
+      );
+      const response = await fetch(
+        `/api/admin/catalog/${song.id}/analyze`,
+        { method: "POST" }
+      );
+      const body = await response.json();
+      if (!response.ok) {
+        setError(
+          `${song.title}: ${body.error ?? "Unable to analyze the song."}`
+        );
+        continue;
+      }
+      setSongs((current) =>
+        current.map((item) =>
+          item.id === song.id ? { ...item, ...body.song } : item
+        )
+      );
+    }
+    setBusySongId("");
+    setAnalysisProgress("Existing songs have been analyzed.");
+  }
+
+  function automaticGain(song: SongCard) {
+    if (
+      !playbackSettings.loudnessCompensationEnabled ||
+      song.integratedLufs === null ||
+      song.shortTermP95Lufs === null
+    ) {
+      return 0;
+    }
+    return Math.round(
+      Math.min(
+        playbackSettings.integratedTargetLufs - song.integratedLufs,
+        playbackSettings.shortTermTargetLufs - song.shortTermP95Lufs
+      ) * 10
+    ) / 10;
   }
 
   return (
@@ -228,19 +344,22 @@ export function SongManager({
                 <Download size={18} />
               </span>
               <div>
-                <h2>Import from YouTube</h2>
-                <p>Audio, title, artist, and thumbnail are collected for you.</p>
+                <h2>Import from a link</h2>
+                <p>
+                  yt-dlp collects audio, title, artist, and artwork from
+                  supported sites.
+                </p>
               </div>
             </div>
             <form onSubmit={importFromYouTube}>
               <label>
-                YouTube link
+                Media link
                 <input
                   name="url"
                   type="url"
                   required
                   value={importUrl}
-                  placeholder="https://www.youtube.com/watch?v=…"
+                  placeholder="https://youtube.com/… or https://bilibili.com/…"
                   onChange={(event) => setImportUrl(event.target.value)}
                 />
               </label>
@@ -297,8 +416,8 @@ export function SongManager({
                   : "Import song and cover"}
               </button>
               <p className="import-notice">
-                Single public videos only. Import media you have permission to
-                download.
+                Single public HTTPS videos only. Import media you have
+                permission to download.
               </p>
             </form>
 
@@ -313,6 +432,27 @@ export function SongManager({
               <p>{songs.length} of 250 marker numbers assigned</p>
             </div>
           </div>
+
+          {songs.some((song) => song.integratedLufs === null) && (
+            <button
+              className="secondary-button analyze-library-button"
+              type="button"
+              disabled={busySongId === "bulk-analysis"}
+              onClick={() => void analyzeExistingSongs()}
+            >
+              <AudioLines size={18} aria-hidden="true" />
+              {busySongId === "bulk-analysis"
+                ? analysisProgress
+                : "Analyze existing songs"}
+            </button>
+          )}
+          {analysisProgress &&
+            busySongId !== "bulk-analysis" &&
+            !songs.some((song) => song.integratedLufs === null) && (
+              <p className="analysis-progress" aria-live="polite">
+                {analysisProgress}
+              </p>
+            )}
 
           {songs.length === 0 ? (
             <div className="empty-library">
@@ -349,6 +489,112 @@ export function SongManager({
                   >
                     <Trash2 size={19} />
                   </button>
+                  <details className="catalog-tuning">
+                    <summary>
+                      <SlidersHorizontal size={17} aria-hidden="true" />
+                      Playback setup
+                    </summary>
+                    <div className="catalog-analysis">
+                      {song.integratedLufs !== null ? (
+                        <>
+                          <span>
+                            Average <strong>{song.integratedLufs} LUFS</strong>
+                          </span>
+                          <span>
+                            Loud sections{" "}
+                            <strong>{song.shortTermP95Lufs} LUFS</strong>
+                          </span>
+                          <span>
+                            Automatic{" "}
+                            <strong>
+                              {automaticGain(song) > 0 ? "+" : ""}
+                              {automaticGain(song)} dB
+                            </strong>
+                          </span>
+                        </>
+                      ) : (
+                        <span>
+                          {song.analysisError ||
+                            "This existing song has not been analyzed yet."}
+                        </span>
+                      )}
+                    </div>
+                    <form
+                      className="song-tuning-form"
+                      onSubmit={(event) =>
+                        void saveSongPlayback(event, song)
+                      }
+                    >
+                      <label>
+                        Manual correction
+                        <span>
+                          <input
+                            name="manualGainDb"
+                            type="number"
+                            min="-12"
+                            max="12"
+                            step="0.5"
+                            defaultValue={song.manualGainDb}
+                            key={`${song.id}-gain-${song.manualGainDb}`}
+                          />
+                          dB
+                        </span>
+                      </label>
+                      <label>
+                        Start at
+                        <span>
+                          <input
+                            name="startSeconds"
+                            type="number"
+                            min="0"
+                            max={song.durationMs / 1_000 || undefined}
+                            step="0.001"
+                            defaultValue={formatSeconds(song.startMs)}
+                            key={`${song.id}-start-${song.startMs}`}
+                          />
+                          sec
+                        </span>
+                      </label>
+                      <label>
+                        End at
+                        <span>
+                          <input
+                            name="endSeconds"
+                            type="number"
+                            min="0.001"
+                            max={song.durationMs / 1_000 || undefined}
+                            step="0.001"
+                            placeholder={
+                              song.durationMs
+                                ? formatSeconds(song.durationMs)
+                                : "Full song"
+                            }
+                            defaultValue={formatSeconds(song.endMs)}
+                            key={`${song.id}-end-${song.endMs}`}
+                          />
+                          sec
+                        </span>
+                      </label>
+                      <div className="song-tuning-actions">
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          disabled={busySongId === song.id}
+                          onClick={() => void analyzeSong(song)}
+                        >
+                          <AudioLines size={17} aria-hidden="true" />
+                          {song.analyzedAt ? "Analyze again" : "Analyze"}
+                        </button>
+                        <button
+                          className="primary-button"
+                          type="submit"
+                          disabled={busySongId === song.id}
+                        >
+                          Save playback
+                        </button>
+                      </div>
+                    </form>
+                  </details>
                 </article>
               ))}
             </div>

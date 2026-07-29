@@ -13,6 +13,7 @@ import {
 } from "@/lib/media";
 import {
   createSongCard,
+  getPlaybackSettings,
   listSongCards,
   nextMarkerId
 } from "@/lib/repository";
@@ -39,7 +40,8 @@ export function GET(request: NextRequest) {
   if (!isAdminRequest(request)) return unauthorized();
   return NextResponse.json({
     cards: listSongCards(),
-    nextMarkerId: nextMarkerId()
+    nextMarkerId: nextMarkerId(),
+    playbackSettings: getPlaybackSettings()
   });
 }
 
@@ -127,7 +129,10 @@ export async function POST(request: NextRequest) {
       filename: storedAudio.filename,
       originalName: audio.name,
       mimeType: storedAudio.mimeType,
-      coverFilename: storedCover?.coverFilename ?? null
+      coverFilename: storedCover?.coverFilename ?? null,
+      durationMs: storedAudio.durationMs,
+      analysis: storedAudio.analysis,
+      analysisError: storedAudio.analysisError
     });
     triggerOwnToneScan().catch((error) => {
       console.error("Unable to trigger OwnTone scan", error);

@@ -7,6 +7,7 @@ playback.
 
 ## Interfaces
 
+- `/` — choice of kiosk or administrator interface
 - `/kiosk` — child-facing camera scanner suitable for an iPad Home Screen app
 - `/library` — caregiver song browsing and direct playback
 - `/remote` — caregiver playback, state, and volume controls
@@ -25,10 +26,23 @@ browser MIME type. Known formats are preserved when possible; WebM, Opus,
 video containers, and other decodable formats are normalized to M4A/AAC with
 FFmpeg.
 
-The administrator can also paste a public YouTube URL. Song Cards imports one
-video's audio, title, artist, and thumbnail as a background job. Playlists,
-non-YouTube hosts, and unauthenticated import requests are rejected. Only
-import media you own or have permission to download.
+The administrator can also paste a public HTTPS URL supported by yt-dlp,
+including YouTube and Bilibili. Song Cards imports one video's audio, title,
+artist, and thumbnail as a background job. Playlists, local/private hosts, and
+unauthenticated import requests are rejected. Only import media you own or
+have permission to download.
+
+New audio is measured with FFmpeg's EBU R128 analyzer. Song Cards keeps the
+caregiver's master volume stable and sends a compensated volume to OwnTone for
+each song. The targets and calibrated response curve can be adjusted under
+`/admin/system`, while each song has a separate manual correction under
+`/admin/songs`. Existing libraries can be analyzed there with one button.
+
+Start and end points are also stored as non-destructive song metadata. OwnTone
+seeks to the start when playback begins and Song Cards stops at the end during
+normal player polling. An authenticated administrator can set these points
+while listening on `/remote`; its seek slider is constrained to the configured
+playback window.
 
 The scanner uses the `ARUCO_MIP_36h12` dictionary, which provides 250 marker
 identifiers. Deleting a song releases its marker number for reuse.
@@ -57,7 +71,7 @@ If yt-dlp is not on `PATH`, point the application to it with `YTDLP_PATH`.
 Open:
 
 ```text
-http://127.0.0.1:3000/kiosk
+http://127.0.0.1:3000/
 http://127.0.0.1:3000/library
 http://127.0.0.1:3000/remote
 http://127.0.0.1:3000/admin/songs
@@ -106,6 +120,16 @@ YOUTUBE_IMPORT_TIMEOUT_SECONDS=600
 YTDLP_AUTO_UPDATE=true
 YTDLP_UPDATE_CHANNEL=stable
 YTDLP_UPDATE_INTERVAL_HOURS=24
+```
+
+Loudness defaults can also be supplied through the environment. Once changed
+in the System interface, the database values take precedence:
+
+```dotenv
+LOUDNESS_COMPENSATION_ENABLED=true
+LOUDNESS_TARGET_LUFS=-16
+LOUDNESS_SHORT_TERM_TARGET_LUFS=-13.5
+VOLUME_CURVE_DIVISOR=74
 ```
 
 Use the `nightly` update channel temporarily when a YouTube change has not yet

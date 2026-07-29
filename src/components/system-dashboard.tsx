@@ -5,25 +5,38 @@ import {
   CircleX,
   Download,
   RefreshCw,
+  SlidersHorizontal,
   Speaker
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import type { PlayerStatus, YtDlpStatus } from "@/lib/types";
+import type {
+  PlaybackSettings,
+  PlayerStatus,
+  YtDlpStatus
+} from "@/lib/types";
 
 export function SystemDashboard() {
   const [player, setPlayer] = useState<PlayerStatus | null>(null);
   const [downloader, setDownloader] = useState<YtDlpStatus | null>(null);
+  const [settings, setSettings] = useState<PlaybackSettings | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [settingsMessage, setSettingsMessage] = useState("");
 
   const refresh = useCallback(async () => {
-    const [playerResponse, toolResponse] = await Promise.all([
+    const [playerResponse, toolResponse, settingsResponse] = await Promise.all([
       fetch("/api/player", { cache: "no-store" }),
-      fetch("/api/admin/tools/yt-dlp", { cache: "no-store" })
+      fetch("/api/admin/tools/yt-dlp", { cache: "no-store" }),
+      fetch("/api/admin/settings/playback", { cache: "no-store" })
     ]);
     if (playerResponse.ok) setPlayer(await playerResponse.json());
     if (toolResponse.ok) {
       const body = await toolResponse.json();
       setDownloader(body.status);
+    }
+    if (settingsResponse.ok) {
+      const body = await settingsResponse.json();
+      setSettings(body.settings);
     }
   }, []);
 
@@ -40,6 +53,25 @@ export function SystemDashboard() {
     const body = await response.json();
     setUpdating(false);
     if (response.ok) setDownloader(body.status);
+  }
+
+  async function saveLoudnessSettings() {
+    if (!settings) return;
+    setSavingSettings(true);
+    setSettingsMessage("");
+    const response = await fetch("/api/admin/settings/playback", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(settings)
+    });
+    const body = await response.json();
+    setSavingSettings(false);
+    if (!response.ok) {
+      setSettingsMessage(body.error ?? "Unable to save loudness settings.");
+      return;
+    }
+    setSettings(body.settings);
+    setSettingsMessage("Loudness settings saved.");
   }
 
   return (
@@ -99,8 +131,12 @@ export function SystemDashboard() {
               <dd>{player?.state ?? "—"}</dd>
             </div>
             <div>
-              <dt>Volume</dt>
+              <dt>Master volume</dt>
               <dd>{player ? `${player.volume}%` : "—"}</dd>
+            </div>
+            <div>
+              <dt>OwnTone volume</dt>
+              <dd>{player ? `${player.effectiveVolume}%` : "—"}</dd>
             </div>
           </dl>
           {player?.message && <p className="system-message">{player.message}</p>}
@@ -168,6 +204,120 @@ export function SystemDashboard() {
             />
             {updating ? "Updating…" : "Check for update"}
           </button>
+        </section>
+
+        <section className="surface system-panel system-panel--wide">
+          <div className="system-panel__heading">
+            <span className="system-panel__icon system-panel__icon--loudness">
+              <SlidersHorizontal size={26} aria-hidden="true" />
+            </span>
+            <div>
+              <span className="section-kicker">Loudness</span>
+              <h2>Song compensation</h2>
+            </div>
+          </div>
+          {settings && (
+            <div className="loudness-settings">
+              <label className="toggle-field">
+                <input
+                  type="checkbox"
+                  checked={settings.loudnessCompensationEnabled}
+                  onChange={(event) =>
+                    setSettings({
+                      ...settings,
+                      loudnessCompensationEnabled: event.target.checked
+                    })
+                  }
+                />
+                <span>
+                  <strong>Automatically balance songs</strong>
+                  <small>
+                    Keep the master volume familiar while adjusting OwnTone per
+                    song.
+                  </small>
+                </span>
+              </label>
+              <div className="loudness-fields">
+                <label>
+                  Average target
+                  <span>
+                    <input
+                      type="number"
+                      min="-24"
+                      max="-8"
+                      step="0.5"
+                      value={settings.integratedTargetLufs}
+                      onChange={(event) =>
+                        setSettings({
+                          ...settings,
+                          integratedTargetLufs: Number(event.target.value)
+                        })
+                      }
+                    />
+                    LUFS
+                  </span>
+                  <small>Lower values produce a quieter reference.</small>
+                </label>
+                <label>
+                  Loud-section guard
+                  <span>
+                    <input
+                      type="number"
+                      min="-20"
+                      max="-5"
+                      step="0.5"
+                      value={settings.shortTermTargetLufs}
+                      onChange={(event) =>
+                        setSettings({
+                          ...settings,
+                          shortTermTargetLufs: Number(event.target.value)
+                        })
+                      }
+                    />
+                    LUFS
+                  </span>
+                  <small>Prevents dynamic stories becoming too loud.</small>
+                </label>
+                <label>
+                  Curve divisor
+                  <span>
+                    <input
+                      type="number"
+                      min="30"
+                      max="120"
+                      step="1"
+                      value={settings.curveDivisor}
+                      onChange={(event) =>
+                        setSettings({
+                          ...settings,
+                          curveDivisor: Number(event.target.value)
+                        })
+                      }
+                    />
+                  </span>
+                  <small>Higher values make compensation gentler.</small>
+                </label>
+              </div>
+              <p className="system-message">
+                Defaults are calibrated from your listening tests: −16 LUFS,
+                −13.5 LUFS for louder sections, and a divisor of 74. Changes
+                apply on the next song or volume adjustment.
+              </p>
+              {settingsMessage && (
+                <p className="settings-result" aria-live="polite">
+                  {settingsMessage}
+                </p>
+              )}
+              <button
+                className="secondary-button system-update"
+                type="button"
+                disabled={savingSettings}
+                onClick={() => void saveLoudnessSettings()}
+              >
+                {savingSettings ? "Saving…" : "Save loudness settings"}
+              </button>
+            </div>
+          )}
         </section>
       </div>
     </main>

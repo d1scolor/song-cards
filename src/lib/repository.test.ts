@@ -40,7 +40,10 @@ const {
   createSongCard,
   deleteSongCard,
   findSongCardById,
-  nextMarkerId
+  getPlaybackSettings,
+  nextMarkerId,
+  updatePlaybackSettings,
+  updateSongPlayback
 } = await import("@/lib/repository");
 
 after(() => {
@@ -79,4 +82,46 @@ test("deleting a song releases its marker for reuse", () => {
 
   assert.equal(replacement.markerId, 0);
   assert.equal(nextMarkerId(), 1);
+});
+
+test("persists global loudness settings and song playback metadata", () => {
+  const card = createSongCard({
+    title: "Tunable song",
+    artist: "",
+    markerId: 2,
+    filename: "tunable.mp3",
+    originalName: "tunable.mp3",
+    mimeType: "audio/mpeg",
+    coverFilename: null,
+    durationMs: 90_000,
+    analysis: {
+      integratedLufs: -20,
+      shortTermP95Lufs: -16,
+      loudnessRangeLu: 6
+    }
+  });
+
+  const updated = updateSongPlayback(card.id, {
+    manualGainDb: -1.5,
+    startMs: 2_500,
+    endMs: 80_000
+  });
+  assert.equal(updated?.manualGainDb, -1.5);
+  assert.equal(updated?.startMs, 2_500);
+  assert.equal(updated?.endMs, 80_000);
+  assert.equal(updated?.integratedLufs, -20);
+
+  updatePlaybackSettings({
+    loudnessCompensationEnabled: false,
+    integratedTargetLufs: -17,
+    shortTermTargetLufs: -14,
+    curveDivisor: 80
+  });
+  assert.deepEqual(getPlaybackSettings(), {
+    masterVolume: 35,
+    loudnessCompensationEnabled: false,
+    integratedTargetLufs: -17,
+    shortTermTargetLufs: -14,
+    curveDivisor: 80
+  });
 });
