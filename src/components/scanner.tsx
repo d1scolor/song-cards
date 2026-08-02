@@ -247,7 +247,10 @@ export function Scanner({
         maxHammingDistance: 5
       });
       const frontCameraVideoConstraints: MediaTrackConstraints = {
-        facingMode: { exact: "user" },
+        // Prefer the front camera without requiring browsers to classify it as
+        // user-facing. Desktop Firefox can report a built-in camera without a
+        // facing-mode classification and reject an exact constraint.
+        facingMode: { ideal: "user" },
         width: { ideal: 1280 },
         height: { ideal: 720 }
       };
@@ -255,27 +258,8 @@ export function Scanner({
         audio: false,
         video: frontCameraVideoConstraints
       };
-      let stream: MediaStream;
-      try {
-        stream =
-          await navigator.mediaDevices.getUserMedia(frontCameraConstraints);
-      } catch (error) {
-        if (
-          !(error instanceof DOMException) ||
-          error.name !== "OverconstrainedError"
-        ) {
-          throw error;
-        }
-        // Desktop browsers do not always label their built-in camera as
-        // user-facing, so retain a preference without making it mandatory.
-        stream = await navigator.mediaDevices.getUserMedia({
-          ...frontCameraConstraints,
-          video: {
-            ...frontCameraVideoConstraints,
-            facingMode: { ideal: "user" }
-          }
-        });
-      }
+      const stream =
+        await navigator.mediaDevices.getUserMedia(frontCameraConstraints);
       streamRef.current = stream;
       if (!videoRef.current) return;
       videoRef.current.srcObject = stream;
