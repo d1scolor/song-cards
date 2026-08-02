@@ -7,13 +7,17 @@ authenticated caregivers can optionally listen on their current browser.
 
 ## Interfaces
 
-- `/` — choice of kiosk or administrator interface
-- `/kiosk` — child-facing camera scanner suitable for an iPad Home Screen app
+- `/` — browser choice of kiosk or administrator interface
+- `/kiosk` — child-facing camera scanner and the installed Home Screen app
 - `/admin/now-playing` — protected OwnTone and local-device playback controls
 - `/admin/library` — protected browsing, playback, tuning, and song removal
 - `/admin/add` — protected audio upload and link import
 - `/admin/print` — protected printable card-sheet builder
 - `/admin/system` — protected OwnTone and yt-dlp status
+
+Install `/kiosk` as the child-facing app. Caregivers can bookmark the protected
+`/admin` pages in their normal browser; those routes are intentionally not a
+separate installed app.
 
 The former `/play`, `/cards`, `/library`, `/remote`, `/control`, and
 `/admin/songs` paths redirect to their current locations so existing bookmarks
