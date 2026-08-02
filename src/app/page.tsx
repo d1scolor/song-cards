@@ -11,7 +11,11 @@ export default async function Home() {
         <h1>Where would you like to go?</h1>
         <p>Open the child-friendly scanner or manage the song collection.</p>
         <div className="landing-choices">
-          <Link className="landing-choice landing-choice--kiosk" href="/kiosk">
+          <Link
+            className="landing-choice landing-choice--kiosk"
+            href="/kiosk"
+            replace
+          >
             <span>
               <Camera size={34} aria-hidden="true" />
             </span>
