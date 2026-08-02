@@ -96,6 +96,27 @@ export function Scanner({
   }, [stage]);
 
   useEffect(() => {
+    const standalone = window.matchMedia("(display-mode: standalone)").matches;
+    if (!standalone) return;
+
+    const guardKey = "__songCardsKioskGuard";
+    const addGuard = () => {
+      window.history.pushState(
+        { ...window.history.state, [guardKey]: true },
+        "",
+        window.location.href
+      );
+    };
+
+    // Give the installed kiosk one same-page history entry to consume. When
+    // Android's Back gesture removes it, restore it without leaving the kiosk.
+    if (!window.history.state?.[guardKey]) addGuard();
+    window.addEventListener("popstate", addGuard);
+
+    return () => window.removeEventListener("popstate", addGuard);
+  }, []);
+
+  useEffect(() => {
     if (playbackTarget !== "local" || !localPlayer.track) return;
     if (["loading", "play", "pause"].includes(localPlayer.state)) {
       localPlaybackWasActiveRef.current = true;
