@@ -355,18 +355,29 @@ function cleanMetadataValue(value: unknown, fallback = "") {
   return value.replace(/\s+/g, " ").trim().slice(0, 120) || fallback;
 }
 
-function friendlyDownloadError(error: unknown) {
+function cleanCommandOutput(output: string) {
+  return output
+    .replace(/\x1b\[[0-9;]*m/g, "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function summarizeLines(lines: string[]) {
+  return lines.slice(-3).join(" ").slice(0, 500);
+}
+
+export function friendlyDownloadError(error: unknown) {
   if (error instanceof MediaValidationError) return error.message;
   if (error instanceof CommandError) {
-    const details = `${error.stderr}\n${error.stdout}`
-      .replace(/\x1b\[[0-9;]*m/g, "")
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .slice(-3)
-      .join(" ")
-      .slice(0, 500);
-    return details || "yt-dlp could not download that video.";
+    const stderrLines = cleanCommandOutput(error.stderr);
+    const stdoutLines = cleanCommandOutput(error.stdout);
+    const explicitErrors = [...stderrLines, ...stdoutLines].filter((line) =>
+      /(?:^|\s)ERROR:/i.test(line)
+    );
+    if (explicitErrors.length > 0) return summarizeLines(explicitErrors);
+    if (stderrLines.length > 0) return summarizeLines(stderrLines);
+    return error.message || "yt-dlp could not download that video.";
   }
   return error instanceof Error ? error.message : "The import failed.";
 }

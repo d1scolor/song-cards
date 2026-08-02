@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { validateYouTubeUrl, YouTubeUrlError } from "@/lib/ytdlp";
+import { CommandError } from "@/lib/command";
+import {
+  friendlyDownloadError,
+  validateYouTubeUrl,
+  YouTubeUrlError
+} from "@/lib/ytdlp";
 
 test("accepts public HTTPS media URLs", () => {
   assert.equal(
@@ -29,4 +34,26 @@ test("rejects insecure, credential-bearing, and local URLs", () => {
   ]) {
     assert.throws(() => validateYouTubeUrl(url), YouTubeUrlError);
   }
+});
+
+test("surfaces yt-dlp errors instead of trailing progress output", () => {
+  const error = new CommandError("yt-dlp exited with status 1.", {
+    stderr: "ERROR: [youtube] The remote server closed the connection",
+    stdout: [
+      "[info] Writing video thumbnail 41 to: /tmp/audio.webp",
+      "[info] Writing video metadata as JSON to: /tmp/audio.info.json",
+      "[ThumbnailsConvertor] Not converting thumbnail; already webp"
+    ].join("\n"),
+    exitCode: 1
+  });
+
+  assert.equal(
+    friendlyDownloadError(error),
+    "ERROR: [youtube] The remote server closed the connection"
+  );
+});
+
+test("surfaces command failures when yt-dlp produces no diagnostics", () => {
+  const error = new CommandError("yt-dlp timed out.");
+  assert.equal(friendlyDownloadError(error), "yt-dlp timed out.");
 });
