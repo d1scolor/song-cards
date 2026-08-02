@@ -3198,6 +3198,12 @@ form input::placeholder {
   }
 }
 
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  .admin-navigation {
+    padding-top: calc(14px + env(safe-area-inset-top));
+  }
+}
+
 @media print {
   @page {
     size: A4 portrait;
