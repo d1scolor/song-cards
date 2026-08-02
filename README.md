@@ -7,7 +7,7 @@ authenticated caregivers can optionally listen on their current browser.
 
 ## Interfaces
 
-- `/` — browser choice of kiosk or administrator interface
+- `/` — redirects to the child-facing kiosk
 - `/kiosk` — child-facing camera scanner and the installed Home Screen app
 - `/admin/now-playing` — protected OwnTone and local-device playback controls
 - `/admin/library` — protected browsing, playback, tuning, and song removal
