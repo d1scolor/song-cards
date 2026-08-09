@@ -1,6 +1,7 @@
 .git
 .next
 data
+docs
 node_modules
 *.log
 .env

@@ -31,6 +31,31 @@ continue to work.
 Uploaded cover images are validated, resized, and stored as WebP files. They
 appear after a successful scan and in both playback control interfaces.
 
+## Screenshots
+
+### Child-facing kiosk
+
+The installed kiosk keeps the interaction focused: choose a card, tap once to
+open the scanner, and the assigned song starts playing.
+
+<img src="docs/screenshots/kiosk.jpg" alt="Song Cards child-facing kiosk ready to scan a card" width="380">
+
+### Printable song cards
+
+The marker fronts and matching cover backs are arranged for duplex printing.
+After printing, cut along the guides and pair each marker with its cover image.
+
+| Marker fronts | Cover backs |
+| --- | --- |
+| <img src="docs/screenshots/card-fronts.jpg" alt="Printable fronts containing song titles and ArUco markers"> | <img src="docs/screenshots/card-backs.jpg" alt="Printable backs containing the matching song cover images"> |
+
+### Add songs
+
+Caregivers can upload an audio file and cover or import supported media from a
+public link.
+
+<img src="docs/screenshots/add-songs.jpg" alt="Song Cards administrator page for uploading or importing songs" width="900">
+
 Audio uploads are inspected with FFprobe rather than trusted by filename or
 browser MIME type. Known formats are preserved when possible; WebM, Opus,
 video containers, and other decodable formats are normalized to M4A/AAC with

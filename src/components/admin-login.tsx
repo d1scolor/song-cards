@@ -3,6 +3,7 @@
 import { KeyRound, Music2 } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { adminLoginErrorMessage } from "@/lib/admin-login-error";
 
 export function AdminLogin() {
   const router = useRouter();
@@ -13,20 +14,26 @@ export function AdminLogin() {
     event.preventDefault();
     setBusy(true);
     setError("");
-    const form = new FormData(event.currentTarget);
-    const response = await fetch("/api/admin/login", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ password: form.get("password") })
-    });
-    const body = await response.json();
-    setBusy(false);
-    if (!response.ok) {
-      setError(body.error ?? "Unable to sign in.");
-      return;
+    try {
+      const form = new FormData(event.currentTarget);
+      const response = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password: form.get("password") })
+      });
+      if (!response.ok) {
+        setError(await adminLoginErrorMessage(response));
+        return;
+      }
+      router.replace("/admin/now-playing");
+      router.refresh();
+    } catch {
+      setError(
+        "Song Cards could not reach the server to check the password. Check your connection and try again."
+      );
+    } finally {
+      setBusy(false);
     }
-    router.replace("/admin/now-playing");
-    router.refresh();
   }
 
   return (
@@ -47,12 +54,18 @@ export function AdminLogin() {
                 name="password"
                 type="password"
                 autoComplete="current-password"
+                aria-describedby={error ? "admin-login-error" : undefined}
+                aria-invalid={Boolean(error)}
                 required
                 autoFocus
               />
             </span>
           </label>
-          {error && <p className="form-error">{error}</p>}
+          {error && (
+            <p className="form-error" id="admin-login-error" role="alert">
+              {error}
+            </p>
+          )}
           <button className="primary-button" disabled={busy} type="submit">
             {busy ? "Signing in…" : "Sign in"}
           </button>

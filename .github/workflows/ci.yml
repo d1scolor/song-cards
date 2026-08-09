@@ -54,6 +54,8 @@ jobs:
           tags: |
             type=raw,value=latest
             type=sha,prefix=sha-,format=long
+          labels: |
+            org.opencontainers.image.licenses=GPL-3.0-only
       - name: Build and publish image
         uses: docker/build-push-action@v7
         with:
