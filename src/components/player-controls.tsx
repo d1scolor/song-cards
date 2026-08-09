@@ -40,7 +40,7 @@ export function PlayerControls({
       onStatus?.(next);
     } catch {
       setStatus({
-        backend: "mock",
+        backend: "disabled",
         connected: false,
         state: "stop",
         volume: 0,

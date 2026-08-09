@@ -24,11 +24,21 @@ RUN apt-get update \
   && curl -fsSL \
        "https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/${asset}" \
        -o /yt-dlp \
+  && curl -fsSL \
+       "https://raw.githubusercontent.com/yt-dlp/yt-dlp/${YTDLP_VERSION}/LICENSE" \
+       -o /yt-dlp.LICENSE \
+  && curl -fsSL \
+       "https://raw.githubusercontent.com/yt-dlp/yt-dlp/${YTDLP_VERSION}/THIRD_PARTY_LICENSES.txt" \
+       -o /yt-dlp.THIRD_PARTY_LICENSES.txt \
   && echo "${checksum}  /yt-dlp" | sha256sum -c - \
   && chmod 0755 /yt-dlp
 
 FROM node:24-bookworm-slim AS runtime
 WORKDIR /app
+LABEL org.opencontainers.image.title="Song Cards" \
+      org.opencontainers.image.description="A self-hosted, child-friendly music-card kiosk" \
+      org.opencontainers.image.source="https://github.com/d1scolor/song-cards" \
+      org.opencontainers.image.licenses="GPL-3.0-only"
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     HOSTNAME=0.0.0.0 \
@@ -43,6 +53,9 @@ COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
 COPY --from=build /app/public ./public
 COPY --from=media-tools /yt-dlp /usr/local/libexec/yt-dlp
+COPY --from=media-tools /yt-dlp.LICENSE /usr/share/doc/song-cards/yt-dlp.LICENSE
+COPY --from=media-tools /yt-dlp.THIRD_PARTY_LICENSES.txt /usr/share/doc/song-cards/yt-dlp.THIRD_PARTY_LICENSES.txt
+COPY LICENSE THIRD_PARTY_NOTICES.md /usr/share/doc/song-cards/
 RUN mkdir -p /data/db /data/media \
   && chown -R node:node /data
 USER node

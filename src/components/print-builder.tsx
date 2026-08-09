@@ -60,7 +60,7 @@ function CoverCard({ card }: { card: SongCard | null }) {
 
 export function PrintBuilder({ cards }: { cards: SongCard[] }) {
   const [density, setDensity] = useState<PrintDensity>(9);
-  const [duplex, setDuplex] = useState(false);
+  const [duplex, setDuplex] = useState(true);
   const [selectedIds, setSelectedIds] = useState(
     () => new Set(cards.map((card) => card.id))
   );

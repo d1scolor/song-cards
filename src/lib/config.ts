@@ -21,9 +21,9 @@ export const config = {
   defaultVolume: integerFromEnv("DEFAULT_VOLUME", 35),
   maxVolume: integerFromEnv("MAX_VOLUME", 65),
   kioskPlaybackTarget:
-    process.env.KIOSK_PLAYBACK_TARGET === "local"
-      ? ("local" as const)
-      : ("owntone" as const),
+    process.env.KIOSK_PLAYBACK_TARGET === "owntone"
+      ? ("owntone" as const)
+      : ("local" as const),
   loudnessCompensationEnabled: booleanFromEnv(
     "LOUDNESS_COMPENSATION_ENABLED",
     true
@@ -51,7 +51,11 @@ export const config = {
     24
   ),
   playbackBackend:
-    process.env.PLAYBACK_BACKEND === "owntone" ? "owntone" : "mock",
+    process.env.PLAYBACK_BACKEND === "owntone"
+      ? ("owntone" as const)
+      : process.env.PLAYBACK_BACKEND === "mock"
+        ? ("mock" as const)
+        : ("disabled" as const),
   ownToneUrl: (process.env.OWNTONE_URL ?? "http://127.0.0.1:3689").replace(
     /\/$/,
     ""

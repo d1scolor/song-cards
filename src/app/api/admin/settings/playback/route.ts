@@ -32,7 +32,7 @@ export async function PUT(request: NextRequest) {
   const parsed = settingsSchema.safeParse(await request.json());
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Invalid loudness settings." },
+      { error: "Invalid playback settings." },
       { status: 400 }
     );
   }

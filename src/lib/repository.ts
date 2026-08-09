@@ -324,6 +324,11 @@ export function getPlaybackSettings(): PlaybackSettings {
     .prepare("SELECT key, value FROM settings")
     .all() as { key: string; value: string }[];
   const values = new Map(rows.map((row) => [row.key, row.value]));
+  const savedPlaybackTarget = values.get(settingKeys.kioskPlaybackTarget);
+  const configuredPlaybackTarget =
+    savedPlaybackTarget === "local" || savedPlaybackTarget === "owntone"
+      ? savedPlaybackTarget
+      : settingDefaults.kioskPlaybackTarget;
   const numberSetting = (
     key: keyof PlaybackSettings,
     fallback: number
@@ -340,9 +345,9 @@ export function getPlaybackSettings(): PlaybackSettings {
       )
     ),
     kioskPlaybackTarget:
-      values.get(settingKeys.kioskPlaybackTarget) === "local"
+      config.playbackBackend === "disabled"
         ? "local"
-        : settingDefaults.kioskPlaybackTarget,
+        : configuredPlaybackTarget,
     loudnessCompensationEnabled:
       values.get(settingKeys.loudnessCompensationEnabled) === undefined
         ? settingDefaults.loudnessCompensationEnabled

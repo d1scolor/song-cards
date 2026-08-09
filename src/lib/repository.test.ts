@@ -9,6 +9,8 @@ const dataDirectory = fs.mkdtempSync(
   path.join(os.tmpdir(), "song-cards-repository-")
 );
 process.env.DATA_DIR = dataDirectory;
+process.env.KIOSK_PLAYBACK_TARGET = "local";
+process.env.PLAYBACK_BACKEND = "mock";
 
 const databaseDirectory = path.join(dataDirectory, "db");
 fs.mkdirSync(databaseDirectory, { recursive: true });
@@ -126,4 +128,7 @@ test("persists global loudness settings and song playback metadata", () => {
     shortTermTargetLufs: -14,
     curveDivisor: 80
   });
+
+  updatePlaybackSettings({ kioskPlaybackTarget: "owntone" });
+  assert.equal(getPlaybackSettings().kioskPlaybackTarget, "owntone");
 });

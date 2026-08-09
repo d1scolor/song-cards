@@ -55,23 +55,35 @@ export function SystemDashboard() {
     if (response.ok) setDownloader(body.status);
   }
 
-  async function savePlaybackSettings() {
-    if (!settings) return;
+  async function savePlaybackSettings(
+    nextSettings = settings,
+    successMessage = "Playback settings saved."
+  ) {
+    if (!nextSettings) return;
+    const previousSettings = settings;
+    setSettings(nextSettings);
     setSavingSettings(true);
     setSettingsMessage("");
-    const response = await fetch("/api/admin/settings/playback", {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(settings)
-    });
-    const body = await response.json();
-    setSavingSettings(false);
-    if (!response.ok) {
-      setSettingsMessage(body.error ?? "Unable to save playback settings.");
-      return;
+    try {
+      const response = await fetch("/api/admin/settings/playback", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(nextSettings)
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        setSettings(previousSettings);
+        setSettingsMessage(body.error ?? "Unable to save playback settings.");
+        return;
+      }
+      setSettings(body.settings);
+      setSettingsMessage(successMessage);
+    } catch {
+      setSettings(previousSettings);
+      setSettingsMessage("Unable to save playback settings.");
+    } finally {
+      setSavingSettings(false);
     }
-    setSettings(body.settings);
-    setSettingsMessage("Playback settings saved.");
   }
 
   return (
@@ -100,12 +112,20 @@ export function SystemDashboard() {
             </span>
             <div>
               <span className="section-kicker">Playback</span>
-              <h2>OwnTone speaker</h2>
+              <h2>
+                {player?.backend === "disabled"
+                  ? "External speaker"
+                  : player?.backend === "mock"
+                    ? "Development player"
+                    : "OwnTone speaker"}
+              </h2>
             </div>
           </div>
           <div
             className={`system-state ${
-              player !== null && !player.connected ? "is-error" : ""
+              player?.backend === "owntone" && !player.connected
+                ? "is-error"
+                : ""
             }`}
           >
             {player?.connected ? (
@@ -116,7 +136,11 @@ export function SystemDashboard() {
             <strong>
               {player === null
                 ? "Checking…"
-                : player.connected
+                : player.backend === "disabled"
+                  ? "Not configured"
+                  : player.backend === "mock"
+                    ? "Development mode"
+                    : player.connected
                   ? "Connected"
                   : "Unavailable"}
             </strong>
@@ -135,7 +159,7 @@ export function SystemDashboard() {
               <dd>{player ? `${player.volume}%` : "—"}</dd>
             </div>
             <div>
-              <dt>OwnTone volume</dt>
+              <dt>Output volume</dt>
               <dd>{player ? `${player.effectiveVolume}%` : "—"}</dd>
             </div>
           </dl>
@@ -221,8 +245,8 @@ export function SystemDashboard() {
               <fieldset className="kiosk-target-settings">
                 <legend>Kiosk playback target</legend>
                 <p>
-                  Choose where scanned cards play. The kiosk itself stays
-                  child-friendly and shows no target switch.
+                  This setting applies to every kiosk in this deployment and
+                  saves as soon as you select an option.
                 </p>
                 <div>
                   <label>
@@ -231,16 +255,26 @@ export function SystemDashboard() {
                       name="kioskPlaybackTarget"
                       value="owntone"
                       checked={settings.kioskPlaybackTarget === "owntone"}
+                      disabled={
+                        savingSettings || player?.backend === "disabled"
+                      }
                       onChange={() =>
-                        setSettings({
-                          ...settings,
-                          kioskPlaybackTarget: "owntone"
-                        })
+                        void savePlaybackSettings(
+                          {
+                            ...settings,
+                            kioskPlaybackTarget: "owntone"
+                          },
+                          "Kiosk playback target saved."
+                        )
                       }
                     />
                     <span>
                       <strong>OwnTone speaker</strong>
-                      <small>Play through the configured AirPlay output.</small>
+                      <small>
+                        {player?.backend === "disabled"
+                          ? "Enable the OwnTone backend to use AirPlay."
+                          : "Play through the configured AirPlay output."}
+                      </small>
                     </span>
                   </label>
                   <label>
@@ -249,16 +283,20 @@ export function SystemDashboard() {
                       name="kioskPlaybackTarget"
                       value="local"
                       checked={settings.kioskPlaybackTarget === "local"}
+                      disabled={savingSettings}
                       onChange={() =>
-                        setSettings({
-                          ...settings,
-                          kioskPlaybackTarget: "local"
-                        })
+                        void savePlaybackSettings(
+                          {
+                            ...settings,
+                            kioskPlaybackTarget: "local"
+                          },
+                          "Kiosk playback target saved."
+                        )
                       }
                     />
                     <span>
-                      <strong>This kiosk</strong>
-                      <small>Play directly through the iPhone or iPad.</small>
+                      <strong>Kiosk device</strong>
+                      <small>Play on whichever device scans the card.</small>
                     </span>
                   </label>
                 </div>

@@ -46,11 +46,13 @@ function automaticGain(song: SongCard, settings: PlaybackSettings) {
 export function AdminSongDetail({
   initialSong,
   playbackSettings,
-  maxVolume
+  maxVolume,
+  speakerPlaybackEnabled
 }: {
   initialSong: SongCard;
   playbackSettings: PlaybackSettings;
   maxVolume: number;
+  speakerPlaybackEnabled: boolean;
 }) {
   const router = useRouter();
   const localPlayer = useLocalPlayback();
@@ -202,23 +204,27 @@ export function AdminSongDetail({
             <p>{song.artist || "Unknown artist"}</p>
           </div>
           <div className="song-play-actions">
+            {speakerPlaybackEnabled && (
+              <button
+                className="primary-button"
+                type="button"
+                onClick={() => void playOnSpeaker()}
+                disabled={playState === "starting"}
+              >
+                {playState === "starting" ? (
+                  <LoaderCircle className="spin" size={21} aria-hidden="true" />
+                ) : playState === "success" ? (
+                  <CheckCircle2 size={21} aria-hidden="true" />
+                ) : (
+                  <Play size={21} fill="currentColor" aria-hidden="true" />
+                )}
+                OwnTone speaker
+              </button>
+            )}
             <button
-              className="primary-button"
-              type="button"
-              onClick={() => void playOnSpeaker()}
-              disabled={playState === "starting"}
-            >
-              {playState === "starting" ? (
-                <LoaderCircle className="spin" size={21} aria-hidden="true" />
-              ) : playState === "success" ? (
-                <CheckCircle2 size={21} aria-hidden="true" />
-              ) : (
-                <Play size={21} fill="currentColor" aria-hidden="true" />
-              )}
-              OwnTone speaker
-            </button>
-            <button
-              className="secondary-button"
+              className={
+                speakerPlaybackEnabled ? "secondary-button" : "primary-button"
+              }
               type="button"
               onClick={() => void playOnDevice()}
               disabled={playState === "starting"}

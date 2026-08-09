@@ -27,6 +27,7 @@ export default async function AdminSongPage({
       initialSong={song}
       playbackSettings={getPlaybackSettings()}
       maxVolume={config.maxVolume}
+      speakerPlaybackEnabled={config.playbackBackend !== "disabled"}
     />
   );
 }

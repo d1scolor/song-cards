@@ -9,6 +9,7 @@ const dataDirectory = fs.mkdtempSync(
   path.join(os.tmpdir(), "song-cards-playback-")
 );
 process.env.DATA_DIR = dataDirectory;
+process.env.PLAYBACK_BACKEND = "mock";
 
 const {
   getPlayerStatus,

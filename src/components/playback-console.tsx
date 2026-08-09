@@ -8,23 +8,29 @@ import {
 } from "@/components/local-playback";
 import { PlayerControls } from "@/components/player-controls";
 
-export function PlaybackConsole() {
+export function PlaybackConsole({
+  speakerPlaybackEnabled
+}: {
+  speakerPlaybackEnabled: boolean;
+}) {
   const localPlayer = useLocalPlayback();
   const [target, setTarget] = useState<"speaker" | "local">(
-    localPlayer.track ? "local" : "speaker"
+    localPlayer.track || !speakerPlaybackEnabled ? "local" : "speaker"
   );
 
   return (
     <>
       <div className="playback-target" role="group" aria-label="Playback target">
-        <button
-          type="button"
-          className={target === "speaker" ? "is-active" : ""}
-          onClick={() => setTarget("speaker")}
-        >
-          <Radio size={19} aria-hidden="true" />
-          OwnTone speaker
-        </button>
+        {speakerPlaybackEnabled && (
+          <button
+            type="button"
+            className={target === "speaker" ? "is-active" : ""}
+            onClick={() => setTarget("speaker")}
+          >
+            <Radio size={19} aria-hidden="true" />
+            OwnTone speaker
+          </button>
+        )}
         <button
           type="button"
           className={target === "local" ? "is-active" : ""}

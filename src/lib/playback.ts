@@ -111,6 +111,24 @@ function mockStatus(): PlayerStatus {
   };
 }
 
+function disabledStatus(): PlayerStatus {
+  const settings = getPlaybackSettings();
+  return {
+    backend: "disabled",
+    connected: false,
+    state: "stop",
+    volume: settings.masterVolume,
+    maxVolume: config.maxVolume,
+    effectiveVolume: 0,
+    progressMs: 0,
+    durationMs: 0,
+    song: null,
+    trim: null,
+    compensation: null,
+    message: "External speaker playback is not configured."
+  };
+}
+
 async function ownToneRequest(
   pathname: string,
   init?: RequestInit,
@@ -230,9 +248,9 @@ async function findOwnToneTrackUri(filename: string) {
 }
 
 export async function getPlayerStatus(): Promise<PlayerStatus> {
-  return config.playbackBackend === "owntone"
-    ? ownToneStatus()
-    : mockStatus();
+  if (config.playbackBackend === "owntone") return ownToneStatus();
+  if (config.playbackBackend === "mock") return mockStatus();
+  return disabledStatus();
 }
 
 export async function playSong(song: Song) {
@@ -253,6 +271,11 @@ export async function playSong(song: Song) {
     const status = mockStatus();
     if (status.state === "play") startEndMonitor();
     return status;
+  }
+  if (config.playbackBackend === "disabled") {
+    throw new Error(
+      "External speaker playback is disabled. Select kiosk-device playback or configure OwnTone."
+    );
   }
 
   await selectConfiguredOutput();
@@ -292,6 +315,7 @@ export async function playerAction(input: {
   volume?: number;
   positionMs?: number;
 }) {
+  if (config.playbackBackend === "disabled") return disabledStatus();
   if (config.playbackBackend === "mock") {
     if (input.action === "play" && mock.song) {
       if (

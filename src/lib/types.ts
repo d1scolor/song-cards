@@ -26,7 +26,7 @@ export type SongCard = Song & {
 export type PlaybackState = "play" | "pause" | "stop";
 
 export type PlayerStatus = {
-  backend: "mock" | "owntone";
+  backend: "disabled" | "mock" | "owntone";
   connected: boolean;
   state: PlaybackState;
   /** The stable volume selected by the caregiver. */
