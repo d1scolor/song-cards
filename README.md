@@ -116,7 +116,8 @@ the standalone app:
 
 ```bash
 cp .env.example .env
-docker compose up -d --build
+docker compose pull app
+docker compose up -d --no-build
 docker compose ps
 ```
 
@@ -152,7 +153,8 @@ OWNTONE_OUTPUT_ID=
 Start the app and OwnTone:
 
 ```bash
-docker compose --profile airplay up -d --build
+docker compose --profile airplay pull
+docker compose --profile airplay up -d --no-build
 docker compose ps
 ```
 
@@ -220,21 +222,24 @@ The `song-cards-db` volume contains SQLite state and tool updates. The
 `song-cards-media` volume contains audio and covers. Back up both volumes
 together while the app is stopped. Test restoration before relying on a backup.
 
-For upgrades, back up both volumes, pull or build the desired image, and run
-`docker compose up -d`. Pin `APP_IMAGE` to a `sha-<commit>` tag when you need a
-reproducible deployment or rollback.
+For upgrades, back up both volumes, run `docker compose pull app`, then run
+`docker compose up -d --no-build`. Pin `APP_IMAGE` to a `sha-<commit>` tag when
+you need a reproducible deployment or rollback.
 
 ## Build and publish to GHCR
 
-After the repository has a GitHub `origin`, commit changes on a clean `main`
-branch and run:
+Every push to `main` runs linting, type checking, tests, and the production
+build in GitHub Actions. After those checks pass, the workflow builds the
+Docker image for AMD64 and ARM64 and publishes these tags:
 
-```bash
-scripts/publish-image.sh
-```
+- `ghcr.io/d1scolor/song-cards:latest`
+- `ghcr.io/d1scolor/song-cards:sha-<full-commit-sha>`
 
-The script authenticates with the GitHub CLI and publishes multi-platform
-`sha-<commit>` and `latest` tags to the GHCR image derived from `origin`.
+Publishing uses the workflow's short-lived `GITHUB_TOKEN`; no personal access
+token or local GHCR login is required. Forks publish under their own repository
+name and should update `APP_IMAGE` accordingly. If an existing GHCR package was
+created outside Actions, grant this repository write access under the package's
+**Manage Actions access** setting before the first workflow run.
 
 ## Contributing and license
 
