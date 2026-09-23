@@ -31,10 +31,8 @@ export const config = {
   integratedTargetLufs: numberFromEnv("LOUDNESS_TARGET_LUFS", -16),
   shortTermTargetLufs: numberFromEnv("LOUDNESS_SHORT_TERM_TARGET_LUFS", -13.5),
   volumeCurveDivisor: numberFromEnv("VOLUME_CURVE_DIVISOR", 74),
-  maxUploadBytes: integerFromEnv("MAX_UPLOAD_MB", 100) * 1024 * 1024,
+  maxUploadBytes: integerFromEnv("MAX_UPLOAD_MB", 2048) * 1024 * 1024,
   maxCoverBytes: integerFromEnv("MAX_COVER_MB", 10) * 1024 * 1024,
-  maxSongDurationSeconds:
-    integerFromEnv("MAX_SONG_DURATION_MINUTES", 30) * 60,
   mediaProcessingTimeoutMs:
     integerFromEnv("MEDIA_PROCESSING_TIMEOUT_SECONDS", 300) * 1000,
   youtubeImportTimeoutMs:

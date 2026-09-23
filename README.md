@@ -195,12 +195,12 @@ copied into `/data/db/tools` and checks its configured update channel at most
 once per day. Its version and manual update control are shown under the
 YouTube import form.
 
-The default import limits and updater behavior can be changed in `.env`:
+Songs have no duration limit. The default audio size limit, import timeouts,
+and updater behavior can be changed in `.env`:
 
 ```dotenv
-MAX_UPLOAD_MB=100
+MAX_UPLOAD_MB=2048
 MAX_COVER_MB=10
-MAX_SONG_DURATION_MINUTES=30
 YOUTUBE_IMPORT_TIMEOUT_SECONDS=600
 YTDLP_AUTO_UPDATE=true
 YTDLP_UPDATE_CHANNEL=stable

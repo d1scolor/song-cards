@@ -109,15 +109,6 @@ export async function probeAudio(filename: string) {
 
   const durationSeconds =
     numericDuration(probe.format?.duration) || numericDuration(audio.duration);
-  if (
-    durationSeconds > 0 &&
-    durationSeconds > config.maxSongDurationSeconds
-  ) {
-    throw new MediaValidationError(
-      `Songs must be ${Math.round(config.maxSongDurationSeconds / 60)} minutes or shorter.`
-    );
-  }
-
   return {
     audioCodec: audio.codec_name,
     durationSeconds,

@@ -27,7 +27,6 @@ type UpdateRecord = {
 type DownloadMetadata = {
   artist?: string;
   channel?: string;
-  duration?: number;
   id?: string;
   title?: string;
   track?: string;
@@ -382,7 +381,7 @@ export function friendlyDownloadError(error: unknown) {
   return error instanceof Error ? error.message : "The import failed.";
 }
 
-async function findDownloadedFiles(directory: string) {
+async function findDownloadedFiles(directory: string, downloadOutput: string) {
   const files = await fs.readdir(/* turbopackIgnore: true */ directory);
   const infoName = files.find((name) => name.endsWith(".info.json"));
   const audioName = files.find(
@@ -397,6 +396,11 @@ async function findDownloadedFiles(directory: string) {
     /^thumbnail\.(avif|jpe?g|png|webp)$/i.test(name)
   );
   if (!infoName || !audioName) {
+    if (/file is larger than max-filesize/i.test(downloadOutput)) {
+      throw new MediaValidationError(
+        "The downloaded audio is larger than the configured upload limit."
+      );
+    }
     throw new Error("yt-dlp finished without producing an audio file.");
   }
   return {
@@ -435,7 +439,7 @@ async function runImport(
       progress: 0
     });
 
-    await runCommand(
+    const download = await runCommand(
       binary.path,
       [
         "--ignore-config",
@@ -450,8 +454,6 @@ async function runImport(
         "3",
         "--max-filesize",
         String(config.maxUploadBytes),
-        "--match-filters",
-        `duration <= ${config.maxSongDurationSeconds}`,
         "--js-runtimes",
         "node",
         "--format",
@@ -497,18 +499,13 @@ async function runImport(
       message: "Preparing the song card…",
       progress: null
     });
-    const files = await findDownloadedFiles(temporaryDirectory);
+    const files = await findDownloadedFiles(
+      temporaryDirectory,
+      `${download.stdout}\n${download.stderr}`
+    );
     const metadata = JSON.parse(
       await fs.readFile(/* turbopackIgnore: true */ files.infoPath, "utf8")
     ) as DownloadMetadata;
-    if (
-      typeof metadata.duration === "number" &&
-      metadata.duration > config.maxSongDurationSeconds
-    ) {
-      throw new MediaValidationError(
-        `Songs must be ${Math.round(config.maxSongDurationSeconds / 60)} minutes or shorter.`
-      );
-    }
     const downloadedSize = (await fs.stat(files.audioPath)).size;
     if (downloadedSize > config.maxUploadBytes) {
       throw new MediaValidationError(
