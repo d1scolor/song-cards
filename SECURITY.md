@@ -24,6 +24,16 @@ media you trust and have permission to download. Song Cards rejects obvious
 local and private destinations, but a downloader that follows remote redirects
 should still be treated as privileged software.
 
+Optional voice settings and service API keys are administrator-only. Keys are
+stored in SQLite and are redacted from responses; protect database backups as
+credentials. Voice endpoints share the trusted-LAN kiosk boundary and require
+same-origin mutation requests. Recordings are size- and duration-limited, and
+only one voice job runs at once. Job identifiers are random capability tokens.
+The agent can only select candidates from bounded searches; it cannot supply
+arbitrary URLs to the downloader or call administrative tools. Preferred
+channels restrict discovery but do not guarantee that their content is suitable
+for every child. Only enable online discovery for sources you trust.
+
 ## Reporting a vulnerability
 
 Please do not open a public issue for a suspected vulnerability. Use a private

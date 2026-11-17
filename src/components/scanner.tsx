@@ -16,9 +16,15 @@ import {
   useLocalPlayback
 } from "@/components/local-playback";
 import { PlayerControls } from "@/components/player-controls";
+import {
+  VoiceRequest,
+  type VoiceRequestHandle
+} from "@/components/voice-request";
+import type { KioskPlaybackResult } from "@/lib/kiosk-playback";
 import type { PlayerStatus } from "@/lib/types";
 
-type ScanStage = "idle" | "opening" | "scanning" | "starting" | "success" | "error";
+type ScanStage =
+  "idle" | "opening" | "scanning" | "starting" | "success" | "error";
 type ScannedSong = {
   id: string | null;
   title: string;
@@ -27,12 +33,16 @@ type ScannedSong = {
 
 export function Scanner({
   showAdminExit = false,
-  initialPlaybackTarget = "owntone"
+  initialPlaybackTarget = "owntone",
+  voiceEnabled = false
 }: {
   showAdminExit?: boolean;
   initialPlaybackTarget?: "owntone" | "local";
+  voiceEnabled?: boolean;
 }) {
   const localPlayer = useLocalPlayback();
+  const voiceRef = useRef<VoiceRequestHandle>(null);
+  const voiceBusyRef = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -52,12 +62,11 @@ export function Scanner({
   const [playbackTarget, setPlaybackTarget] = useState(initialPlaybackTarget);
 
   const syncPlayerSong = useCallback((status: PlayerStatus) => {
+    if (voiceBusyRef.current) return;
     if (status.state === "stop") {
       if (playbackWasActiveRef.current) {
         playbackWasActiveRef.current = false;
-        if (
-          ["opening", "scanning", "starting"].includes(stageRef.current)
-        ) {
+        if (["opening", "scanning", "starting"].includes(stageRef.current)) {
           return;
         }
         setLastSong(null);
@@ -74,8 +83,7 @@ export function Scanner({
       const isSameSong =
         current !== null &&
         (current.id === song.id || current.title === song.title);
-      const coverUrl =
-        song.coverUrl ?? (isSameSong ? current.coverUrl : null);
+      const coverUrl = song.coverUrl ?? (isSameSong ? current.coverUrl : null);
       if (
         current?.id === song.id &&
         current?.title === song.title &&
@@ -117,6 +125,7 @@ export function Scanner({
   }, []);
 
   useEffect(() => {
+    if (voiceBusyRef.current) return;
     if (playbackTarget !== "local" || !localPlayer.track) return;
     if (["loading", "play", "pause"].includes(localPlayer.state)) {
       localPlaybackWasActiveRef.current = true;
@@ -169,12 +178,11 @@ export function Scanner({
           body: JSON.stringify({ markerId })
         });
         const body = await response.json();
-        if (!response.ok) throw new Error(body.error || "That card did not work.");
+        if (!response.ok)
+          throw new Error(body.error || "That card did not work.");
         if (body.playbackTarget === "local" && body.localPlayback) {
           setPlaybackTarget("local");
-          await localPlayer.playTrack(
-            body.localPlayback as LocalPlaybackTrack
-          );
+          await localPlayer.playTrack(body.localPlayback as LocalPlaybackTrack);
         } else {
           if (localPlayer.track) localPlayer.stop();
           setPlaybackTarget("owntone");
@@ -236,6 +244,7 @@ export function Scanner({
 
   async function startCamera() {
     void localPlayer.unlock();
+    await voiceRef.current?.cancel();
     setStage("opening");
     setMessage("Opening the camera…");
     setLastSong(null);
@@ -258,8 +267,9 @@ export function Scanner({
         audio: false,
         video: frontCameraVideoConstraints
       };
-      const stream =
-        await navigator.mediaDevices.getUserMedia(frontCameraConstraints);
+      const stream = await navigator.mediaDevices.getUserMedia(
+        frontCameraConstraints
+      );
       streamRef.current = stream;
       if (!videoRef.current) return;
       videoRef.current.srcObject = stream;
@@ -404,6 +414,58 @@ export function Scanner({
             )}
             {stage === "success" ? "Scan another card" : "Scan my card"}
           </button>
+        )}
+        {voiceEnabled && (
+          <VoiceRequest
+            ref={voiceRef}
+            disabled={scanning || stage === "starting"}
+            currentSong={
+              localPlayer.track
+                ? {
+                    title: localPlayer.track.title,
+                    artist: localPlayer.track.artist
+                  }
+                : lastSong
+                  ? { title: lastSong.title, artist: "" }
+                  : undefined
+            }
+            onBusy={(busy) => {
+              voiceBusyRef.current = busy;
+            }}
+            onMessage={setMessage}
+            beforeStart={async () => {
+              void localPlayer.unlock();
+              localPlayer.pause();
+              setStage("idle");
+              const response = await fetch("/api/player/action", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ action: "pause" })
+              });
+              if (!response.ok)
+                throw new Error("The speaker could not be paused.");
+            }}
+            onPlayed={async (body: KioskPlaybackResult, signal) => {
+              signal.throwIfAborted();
+              if (body.playbackTarget === "local" && "localPlayback" in body) {
+                setPlaybackTarget("local");
+                await localPlayer.playTrack(
+                  body.localPlayback as LocalPlaybackTrack
+                );
+              } else {
+                localPlayer.stop();
+                setPlaybackTarget("owntone");
+              }
+              if (signal.aborted) return;
+              setLastSong({
+                id: body.song.id,
+                title: body.song.title,
+                coverUrl: body.song.coverUrl
+              });
+              setStage("success");
+              setMessage(`${body.song.title} is playing!`);
+            }}
+          />
         )}
       </section>
 

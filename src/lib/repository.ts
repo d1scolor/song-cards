@@ -1,10 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import {
-  coverDirectory,
-  getDatabase,
-  mediaDirectory
-} from "@/lib/db";
+import { coverDirectory, getDatabase, mediaDirectory } from "@/lib/db";
 import { config } from "@/lib/config";
 import type {
   LoudnessAnalysis,
@@ -156,10 +152,10 @@ export function nextMarkerId(): number {
   throw new Error("All 250 marker identifiers have been allocated.");
 }
 
-export function createSongCard(input: {
+export type CreateSongInput = {
   title: string;
   artist: string;
-  markerId: number;
+  markerId?: number;
   filename: string;
   originalName: string;
   mimeType: string;
@@ -167,7 +163,9 @@ export function createSongCard(input: {
   durationMs?: number;
   analysis?: LoudnessAnalysis | null;
   analysisError?: string | null;
-}): SongCard {
+};
+
+export function createSong(input: CreateSongInput): Song {
   const database = getDatabase();
   const id = crypto.randomUUID();
   const createdAt = new Date().toISOString();
@@ -190,7 +188,7 @@ export function createSongCard(input: {
         input.originalName,
         input.mimeType,
         input.coverFilename,
-        Math.max(0, Math.round((input.durationMs ?? 0))),
+        Math.max(0, Math.round(input.durationMs ?? 0)),
         input.analysis?.integratedLufs ?? null,
         input.analysis?.shortTermP95Lufs ?? null,
         input.analysis?.loudnessRangeLu ?? null,
@@ -198,20 +196,19 @@ export function createSongCard(input: {
         input.analysisError ?? null,
         createdAt
       );
-    database
-      .prepare(
-        `INSERT INTO markers (id, song_id, active, created_at)
+    if (input.markerId !== undefined)
+      database
+        .prepare(
+          `INSERT INTO markers (id, song_id, active, created_at)
          VALUES (?, ?, 1, ?)`
-      )
-      .run(input.markerId, id, createdAt);
+        )
+        .run(input.markerId, id, createdAt);
   })();
 
   return {
     id,
     title: input.title,
     artist: input.artist,
-    markerId: input.markerId,
-    active: true,
     filename: input.filename,
     originalName: input.originalName,
     mimeType: input.mimeType,
@@ -229,6 +226,84 @@ export function createSongCard(input: {
     endMs: null,
     createdAt
   };
+}
+
+export function createSongCard(
+  input: CreateSongInput & { markerId: number }
+): SongCard {
+  return { ...createSong(input), markerId: input.markerId, active: true };
+}
+
+export function searchVoiceSongs(query: string): Song[] {
+  const words = query
+    .toLocaleLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+  const rows = getDatabase()
+    .prepare(
+      `SELECT songs.* FROM songs WHERE
+    EXISTS (SELECT 1 FROM markers WHERE song_id = songs.id AND active = 1)
+    OR EXISTS (SELECT 1 FROM voice_cache WHERE song_id = songs.id)`
+    )
+    .all() as SongRow[];
+  return rows
+    .map(mapSong)
+    .map((song) => ({
+      song,
+      score: words.reduce(
+        (score, word) =>
+          score +
+          (song.title.toLocaleLowerCase().includes(word) ? 3 : 0) +
+          (song.artist.toLocaleLowerCase().includes(word) ? 1 : 0),
+        0
+      )
+    }))
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8)
+    .map((item) => item.song);
+}
+
+export function findVoiceCachedSong(videoId: string): Song | null {
+  const database = getDatabase();
+  const row = database
+    .prepare("SELECT song_id FROM voice_cache WHERE video_id = ?")
+    .get(videoId) as { song_id: string } | undefined;
+  if (!row) return null;
+  database
+    .prepare("UPDATE voice_cache SET last_used_at = ? WHERE video_id = ?")
+    .run(Date.now(), videoId);
+  return findSongById(row.song_id);
+}
+
+export function cacheVoiceSong(videoId: string, song: Song) {
+  const database = getDatabase();
+  database
+    .prepare(
+      "INSERT INTO voice_cache (video_id, song_id, last_used_at) VALUES (?, ?, ?)"
+    )
+    .run(videoId, song.id, Date.now());
+  const expired = database
+    .prepare(
+      `SELECT song_id FROM voice_cache
+    ORDER BY last_used_at DESC, rowid DESC LIMIT -1 OFFSET 20`
+    )
+    .all() as { song_id: string }[];
+  for (const row of expired) deleteSongCard(row.song_id);
+}
+
+export function voiceCacheCount() {
+  return (
+    getDatabase()
+      .prepare("SELECT count(*) AS count FROM voice_cache")
+      .get() as { count: number }
+  ).count;
+}
+
+export function touchVoiceCachedSong(songId: string) {
+  getDatabase()
+    .prepare("UPDATE voice_cache SET last_used_at = ? WHERE song_id = ?")
+    .run(Date.now(), songId);
 }
 
 export function updateSongPlayback(
@@ -320,19 +395,17 @@ const settingKeys = {
 
 export function getPlaybackSettings(): PlaybackSettings {
   const database = getDatabase();
-  const rows = database
-    .prepare("SELECT key, value FROM settings")
-    .all() as { key: string; value: string }[];
+  const rows = database.prepare("SELECT key, value FROM settings").all() as {
+    key: string;
+    value: string;
+  }[];
   const values = new Map(rows.map((row) => [row.key, row.value]));
   const savedPlaybackTarget = values.get(settingKeys.kioskPlaybackTarget);
   const configuredPlaybackTarget =
     savedPlaybackTarget === "local" || savedPlaybackTarget === "owntone"
       ? savedPlaybackTarget
       : settingDefaults.kioskPlaybackTarget;
-  const numberSetting = (
-    key: keyof PlaybackSettings,
-    fallback: number
-  ) => {
+  const numberSetting = (key: keyof PlaybackSettings, fallback: number) => {
     const value = Number.parseFloat(values.get(settingKeys[key]) ?? "");
     return Number.isFinite(value) ? value : fallback;
   };
@@ -360,10 +433,7 @@ export function getPlaybackSettings(): PlaybackSettings {
       "shortTermTargetLufs",
       settingDefaults.shortTermTargetLufs
     ),
-    curveDivisor: numberSetting(
-      "curveDivisor",
-      settingDefaults.curveDivisor
-    )
+    curveDivisor: numberSetting("curveDivisor", settingDefaults.curveDivisor)
   };
 }
 
@@ -391,14 +461,12 @@ export function deleteSongCard(songId: string): boolean {
   const row = database
     .prepare("SELECT filename, cover_filename FROM songs WHERE id = ?")
     .get(songId) as
-    | { filename: string; cover_filename: string | null }
-    | undefined;
+    { filename: string; cover_filename: string | null } | undefined;
   if (!row) return false;
 
   database.transaction(() => {
-    database
-      .prepare("DELETE FROM markers WHERE song_id = ?")
-      .run(songId);
+    database.prepare("DELETE FROM voice_cache WHERE song_id = ?").run(songId);
+    database.prepare("DELETE FROM markers WHERE song_id = ?").run(songId);
     database.prepare("DELETE FROM songs WHERE id = ?").run(songId);
   })();
   try {

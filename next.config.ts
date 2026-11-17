@@ -13,7 +13,7 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy", value: "same-origin" },
           {
             key: "Permissions-Policy",
-            value: "camera=(self), microphone=(), geolocation=()"
+            value: "camera=(self), microphone=(self), geolocation=()"
           }
         ]
       }

@@ -48,6 +48,7 @@ type LocalPlaybackContextValue = LocalPlaybackState & {
   unlock: () => Promise<void>;
   playTrack: (track: LocalPlaybackTrack) => Promise<void>;
   toggle: () => Promise<void>;
+  pause: () => void;
   stop: () => void;
   seek: (positionMs: number) => void;
   setMasterVolume: (volume: number) => void;
@@ -363,6 +364,11 @@ export function LocalPlaybackProvider({
     }
   }, [ensureAudioGraph]);
 
+  const pause = useCallback(() => {
+    audioRef.current?.pause();
+    setPlayer((current) => current.track ? { ...current, state: "pause" } : current);
+  }, []);
+
   const stop = useCallback(() => {
     const audio = audioRef.current;
     const track = trackRef.current;
@@ -403,13 +409,14 @@ export function LocalPlaybackProvider({
     () => ({
       ...player,
       unlock,
+      pause,
       playTrack,
       toggle,
       stop,
       seek,
       setMasterVolume
     }),
-    [player, playTrack, seek, setMasterVolume, stop, toggle, unlock]
+    [player, playTrack, seek, setMasterVolume, stop, toggle, unlock, pause]
   );
 
   return (

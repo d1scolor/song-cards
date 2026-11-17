@@ -93,6 +93,46 @@ device scanned the card.
 The scanner uses the `ARUCO_MIP_36h12` dictionary, which provides 250 marker
 identifiers. Deleting a song releases its marker number for reuse.
 
+## Optional voice requests
+
+Under **Admin → System → Ask for a song**, enter the full ASR transcription
+endpoint and chat completions endpoint, their model names, and any API keys.
+Both services use OpenAI-compatible HTTP APIs. These settings are stored in
+SQLite; no deployment environment changes are required. Keys are stored in the
+server database, never returned by the settings API, and should be included
+only in private backups. Leaving a key field blank preserves its saved value;
+use **Remove saved key** to clear it.
+
+Voice requests and YouTube discovery are independently disabled by default.
+Enable voice and reload the kiosk to show **Ask for a song**. The browser needs
+microphone permission and trusted HTTPS (or localhost for development). It
+pauses playback, detects the end of speech locally, and sends a recording of
+up to 30 seconds to the configured ASR service. The VAD model and runtime are
+served by Song Cards; kiosk devices do not load these from a CDN. They are
+copied from dependencies by `predev` and `prebuild`.
+
+A small agent searches the local library first. With online discovery enabled,
+it can use yt-dlp to search YouTube. Up to three preferred channel IDs restrict
+online results to those channels; leave the list empty for unrestricted search.
+Channel IDs use the `UC…` form rather than a channel display name or handle.
+The selected video is checked again when downloading. The agent gets four
+model turns and at most three searches to select a returned result or explicitly
+finish without playing. It cannot choose arbitrary playback URLs or run commands.
+
+Online selections are downloaded before playback. The 20 most recently used
+voice downloads are retained in a separate cache and found by future local
+searches. Each download is limited to 64 MiB and the configured duration limit.
+Cached songs have no card number and do not appear in the printable card library.
+Playback uses the deployment's existing kiosk-device or OwnTone target, including
+loudness balancing. OwnTone must finish indexing new audio before it can play.
+
+One voice request runs at a time. Cancel, leave the kiosk, or start another card
+scan to abandon it; late model results do not automatically start playback.
+Recordings and transcripts are not retained by Song Cards. The configured
+ASR and LLM services receive them and control their own retention. Job status
+contains stage timings for diagnosing delays, and expires when the app restarts
+or the bounded in-memory job history is pruned.
+
 ## Local development
 
 Requirements:

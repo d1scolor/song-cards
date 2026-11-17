@@ -33,7 +33,8 @@ function escapeLavfiFilename(filename: string) {
 }
 
 export async function analyzeAudioLoudness(
-  filename: string
+  filename: string,
+  signal?: AbortSignal
 ): Promise<LoudnessAnalysis> {
   const input = `amovie='${escapeLavfiFilename(path.resolve(filename))}',ebur128=metadata=1`;
   const { stdout } = await runCommand(
@@ -52,7 +53,8 @@ export async function analyzeAudioLoudness(
     ],
     {
       timeoutMs: config.mediaProcessingTimeoutMs,
-      maxOutputCharacters: 8_000_000
+      maxOutputCharacters: 8_000_000,
+      signal
     }
   );
 

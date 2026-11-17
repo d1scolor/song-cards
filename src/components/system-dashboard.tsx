@@ -14,6 +14,7 @@ import type {
   PlayerStatus,
   YtDlpStatus
 } from "@/lib/types";
+import { VoiceSettingsPanel } from "@/components/voice-settings";
 
 export function SystemDashboard() {
   const [player, setPlayer] = useState<PlayerStatus | null>(null);
@@ -402,6 +403,7 @@ export function SystemDashboard() {
             </div>
           )}
         </section>
+        <VoiceSettingsPanel />
       </div>
     </main>
   );

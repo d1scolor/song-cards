@@ -253,7 +253,8 @@ export async function getPlayerStatus(): Promise<PlayerStatus> {
   return disabledStatus();
 }
 
-export async function playSong(song: Song) {
+export async function playSong(song: Song, options: { signal?: AbortSignal } = {}) {
+  options.signal?.throwIfAborted();
   const settings = getPlaybackSettings();
   const compensation = songCompensation(song, settings);
   const adjustedVolume = effectiveVolume(
@@ -279,8 +280,10 @@ export async function playSong(song: Song) {
   }
 
   await selectConfiguredOutput();
+  options.signal?.throwIfAborted();
   await setOwnToneVolume(adjustedVolume);
   const uri = await findOwnToneTrackUri(song.filename);
+  options.signal?.throwIfAborted();
   const params = new URLSearchParams({
     uris: uri,
     clear: "true",
@@ -423,4 +426,20 @@ export async function playerAction(input: {
 export async function triggerOwnToneScan() {
   if (config.playbackBackend !== "owntone") return;
   await ownToneRequest("/api/update", { method: "PUT" }, true);
+}
+
+export async function waitForOwnToneSong(song: Song, signal: AbortSignal) {
+  if (config.playbackBackend !== "owntone") return;
+  await triggerOwnToneScan();
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    signal.throwIfAborted();
+    try {
+      await findOwnToneTrackUri(song.filename);
+      return;
+    } catch {
+      await new Promise<void>((resolve) => setTimeout(resolve, 500));
+    }
+  }
+  throw new Error("The speaker has not indexed this song yet. Please try again.");
 }

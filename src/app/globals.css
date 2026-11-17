@@ -1007,6 +1007,30 @@ h2,
   gap: 24px;
 }
 
+.voice-settings { margin-top: 24px; }
+.voice-settings fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.voice-service-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.voice-service-fields legend { margin-bottom: 14px; font-weight: 800; }
+.voice-settings label { display: block; margin: 14px 0; }
+.voice-settings .toggle-field { display: flex; }
+.voice-settings input:not([type="checkbox"]), .voice-settings textarea {
+  display: block; width: 100%; box-sizing: border-box; margin-top: 7px;
+  padding: 12px; border: 1px solid #ddd2c2; border-radius: 12px; background: #fff;
+  color: var(--ink); font: inherit;
+}
+.voice-settings small { color: var(--muted); line-height: 1.5; }
+.voice-settings .voice-key-clear { display: flex; align-items: center; gap: 8px; font-size: .85rem; }
+.voice-key-clear input { width: 18px; height: 18px; }
+.voice-button {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  margin: 14px auto 0; padding: 14px 26px; min-height: 56px;
+  border: 2px solid #c6b6df; border-radius: 20px; color: #6242a0;
+  background: #f6f1fb; font: inherit; font-weight: 800; cursor: pointer;
+}
+.voice-button--active { background: #eadff8; }
+.voice-button:disabled { opacity: .5; cursor: default; }
+@media (max-width: 700px) { .voice-service-fields { grid-template-columns: 1fr; } }
+
 .system-panel__heading {
   display: flex;
   align-items: center;

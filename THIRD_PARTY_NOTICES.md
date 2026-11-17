@@ -10,6 +10,8 @@ The exact dependency versions are recorded in `package-lock.json`.
 
 | Package | License | Project |
 | --- | --- | --- |
+| @ricky0123/vad-web | ISC | <https://github.com/ricky0123/vad> |
+| onnxruntime-web | MIT | <https://github.com/microsoft/onnxruntime> |
 | better-sqlite3 | MIT | <https://github.com/WiseLibs/better-sqlite3> |
 | js-aruco2 | MIT | <https://github.com/damianofalcioni/js-aruco2> |
 | lucide-react | ISC | <https://lucide.dev> |
@@ -23,6 +25,10 @@ Sharp uses libvips, which is licensed under `LGPL-2.1-or-later`. Its source and
 license information are available from <https://github.com/libvips/libvips>.
 Transitive JavaScript packages and their license metadata are recorded in the
 installed packages referenced by `package-lock.json`.
+
+Voice recording also distributes the Silero VAD v5 model under MIT. Its source
+and license are available at <https://github.com/snakers4/silero-vad>. The VAD,
+Silero, and ONNX Runtime notices are retained in `public/voice-notices.txt`.
 
 ## Container tooling
 

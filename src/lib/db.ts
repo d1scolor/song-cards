@@ -58,6 +58,12 @@ export function getDatabase() {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS voice_cache (
+      video_id TEXT PRIMARY KEY,
+      song_id TEXT NOT NULL UNIQUE REFERENCES songs(id) ON DELETE CASCADE,
+      last_used_at INTEGER NOT NULL
+    );
   `);
 
   // Releases markers orphaned by versions that retained marker rows after

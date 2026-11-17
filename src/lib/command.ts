@@ -30,12 +30,17 @@ export function runCommand(
     timeoutMs?: number;
     maxOutputCharacters?: number;
     onOutput?: (output: string) => void;
+    signal?: AbortSignal;
   } = {}
 ): Promise<{ stdout: string; stderr: string }> {
   const timeoutMs = options.timeoutMs ?? 60_000;
   const outputLimit = options.maxOutputCharacters ?? 64_000;
 
   return new Promise((resolve, reject) => {
+    if (options.signal?.aborted) {
+      reject(options.signal.reason);
+      return;
+    }
     // The command is an explicitly configured executable, not a project file
     // dependency that Next.js should include in its output trace.
     const child = spawn(/* turbopackIgnore: true */ command, args, {
@@ -47,6 +52,8 @@ export function runCommand(
     let stdout = "";
     let stderr = "";
     let timedOut = false;
+    const abort = () => child.kill("SIGKILL");
+    options.signal?.addEventListener("abort", abort, { once: true });
 
     const timer = setTimeout(() => {
       timedOut = true;
@@ -63,6 +70,7 @@ export function runCommand(
     });
     child.on("error", (error) => {
       clearTimeout(timer);
+      options.signal?.removeEventListener("abort", abort);
       reject(
         new CommandError(`Unable to start ${command}: ${error.message}`, {
           stdout,
@@ -72,7 +80,10 @@ export function runCommand(
     });
     child.on("close", (exitCode) => {
       clearTimeout(timer);
-      if (timedOut) {
+      options.signal?.removeEventListener("abort", abort);
+      if (options.signal?.aborted) {
+        reject(options.signal.reason);
+      } else if (timedOut) {
         reject(
           new CommandError(`${command} timed out.`, {
             stdout,

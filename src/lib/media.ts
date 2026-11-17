@@ -72,7 +72,7 @@ function numericDuration(value: string | undefined) {
   return Number.isFinite(duration) ? duration : 0;
 }
 
-export async function probeAudio(filename: string) {
+export async function probeAudio(filename: string, signal?: AbortSignal) {
   let result: { stdout: string };
   try {
     result = await runCommand(
@@ -86,9 +86,10 @@ export async function probeAudio(filename: string) {
         "json",
         filename
       ],
-      { timeoutMs: 30_000 }
+      { timeoutMs: 30_000, signal }
     );
   } catch {
+    signal?.throwIfAborted();
     throw new MediaValidationError(
       "The file could not be read as audio. Check that FFmpeg supports it."
     );
@@ -127,7 +128,8 @@ function canStoreWithoutConversion(
 
 export async function storeAudioFile(
   sourcePath: string,
-  originalName: string
+  originalName: string,
+  signal?: AbortSignal
 ): Promise<{
   filename: string;
   mimeType: string;
@@ -137,7 +139,8 @@ export async function storeAudioFile(
   analysisError: string | null;
 }> {
   ensureStorageDirectories();
-  const probe = await probeAudio(sourcePath);
+  const probe = await probeAudio(sourcePath, signal);
+  signal?.throwIfAborted();
   const sourceExtension = safeExtension(originalName);
   const direct = canStoreWithoutConversion(
     sourceExtension,
@@ -172,7 +175,7 @@ export async function storeAudioFile(
           "+faststart",
           target
         ],
-        { timeoutMs: config.mediaProcessingTimeoutMs }
+        { timeoutMs: config.mediaProcessingTimeoutMs, signal }
       );
     }
 
@@ -185,6 +188,7 @@ export async function storeAudioFile(
     await fs.chmod(target, 0o640);
   } catch (error) {
     await fs.unlink(target).catch(() => undefined);
+    signal?.throwIfAborted();
     if (error instanceof MediaValidationError) throw error;
     throw new MediaValidationError(
       "The audio could not be converted to a supported format."
@@ -194,8 +198,12 @@ export async function storeAudioFile(
   let analysis: LoudnessAnalysis | null = null;
   let analysisError: string | null = null;
   try {
-    analysis = await analyzeAudioLoudness(target);
+    analysis = await analyzeAudioLoudness(target, signal);
   } catch (error) {
+    if (signal?.aborted) {
+      await fs.unlink(target).catch(() => undefined);
+      signal.throwIfAborted();
+    }
     analysisError =
       error instanceof Error ? error.message : "Loudness analysis failed.";
   }

@@ -633,3 +633,12 @@ export function startYouTubeImport(input: {
 export function getYouTubeImportJob(jobId: string) {
   return importJobs.get(jobId) ?? null;
 }
+
+let voiceBinary: Promise<BinaryInfo> | undefined;
+export async function voiceYouTubeBinary() {
+  voiceBinary ??= withToolLock(() => resolveBinary()).catch((error) => {
+    voiceBinary = undefined;
+    throw error;
+  });
+  return (await voiceBinary).path;
+}
