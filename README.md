@@ -111,10 +111,14 @@ up to 30 seconds to the configured ASR service. The VAD model and runtime are
 served by Song Cards; kiosk devices do not load these from a CDN. They are
 copied from dependencies by `predev` and `prebuild`.
 
-A small agent searches the local library first, ignoring spoken filler and
-tolerating minor spelling/transcription errors. Empty searches include library
-titles as context so the model can search a related topic. With online discovery
-enabled, it can use yt-dlp to search YouTube. Up to 50 preferred channel IDs guide
+A small agent receives the full available library (up to 250 card songs plus 20
+cached downloads) as compact candidate IDs, titles, artists and durations. It can
+select a local song in one model turn without a separate library search. The
+transcript is explicitly identified as imperfect speech recognition: the model
+should infer intended names, homophones and phonetic spellings, preferring a
+convincing local pronunciation/name match. If none fits, online discovery uses
+yt-dlp to search YouTube with likely corrected words before falling back to a
+broadly related song. Up to 50 preferred channel IDs guide
 discovery. The agent can use the `all` search scope when preferred results are
 missing or unsuitable; the list is not an allowlist. All preferred channels are
 considered when filtering global results, with a bounded rotating batch also
@@ -129,7 +133,8 @@ responses are never displayed as a no-play decision; those use fixed reason code
 The selected video ID, channel and duration are checked again when downloading.
 The agent gets four
 model turns and at most three searches to select a returned result or explicitly
-finish without playing. It cannot choose arbitrary playback URLs or run commands.
+finish without playing. It can only choose IDs supplied in its library snapshot
+or search results, never arbitrary playback URLs or commands.
 
 Online selections are downloaded before playback. The 20 most recently used
 voice downloads are retained in a separate cache and found by future local
@@ -137,6 +142,11 @@ searches. Each download is limited to 64 MiB and the configured duration limit.
 Cached songs have no card number and do not appear in the printable card library.
 Playback uses the deployment's existing kiosk-device or OwnTone target, including
 loudness balancing. OwnTone must finish indexing new audio before it can play.
+Already indexed selections reuse the library without triggering a rescan. New
+files wait for OwnTone's library scan to finish before queue insertion; a visible
+track alone does not mean OwnTone is ready to accept it. Playback is confirmed
+against the selected track and player state, with one resume attempt if that
+track remains paused.
 
 One voice request runs at a time. Cancel, leave the kiosk, or start another card
 scan to abandon it; late model results do not automatically start playback.

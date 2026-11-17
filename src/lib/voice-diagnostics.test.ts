@@ -40,6 +40,7 @@ test("voice failures classify media errors without retaining raw output or signe
       assert.equal(error.code, expected);
       recordVoiceDiagnostic(id, "download", "failed", {
         code: error.code,
+        speakerOperation: "queue_add",
         ...({ rawMessage: message, apiKey: secret } as object)
       });
     }
@@ -48,6 +49,7 @@ test("voice failures classify media errors without retaining raw output or signe
     assert.equal(output.includes("https://"), false);
     assert.equal(output.includes(id), false);
     assert.ok(output.includes("youtube_forbidden"));
+    assert.ok(output.includes('"speakerOperation":"queue_add"'));
   } finally {
     console.info = original;
   }

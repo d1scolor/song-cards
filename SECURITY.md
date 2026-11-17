@@ -29,7 +29,8 @@ stored in SQLite and are redacted from responses; protect database backups as
 credentials. Voice endpoints share the trusted-LAN kiosk boundary and require
 same-origin mutation requests. Recordings are size- and duration-limited, and
 only one voice job runs at once. Job identifiers are random capability tokens.
-The agent can only select candidates from bounded searches; it cannot supply
+The agent can only select candidates from its bounded library snapshot and
+search results; it cannot supply
 arbitrary URLs to the downloader or call administrative tools. The editable
 prompt controls selection preferences; validated actions and resource limits
 remain enforced by code. Preferred channels guide discovery and allow broader

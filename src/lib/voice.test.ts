@@ -150,6 +150,16 @@ function mockServices() {
         /* initial transcription */
       }
     }
+    if (!results) {
+      for (const message of request.messages) {
+        try {
+          const library = JSON.parse(message.content).localLibrary;
+          if (Array.isArray(library)) results = library;
+        } catch {
+          /* prompts and transcript are plain text */
+        }
+      }
+    }
     const name = results?.length ? "play_result" : "search_library";
     const args = results?.length
       ? { candidateId: results[0].candidateId }

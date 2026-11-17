@@ -188,3 +188,59 @@ test("agent can explicitly decline and never acts on a response after cancellati
   );
   assert.equal(searches, 0);
 });
+
+test("a full library snapshot allows direct selection in one model turn with saved custom prompts", async () => {
+  let turns = 0;
+  const result = await runVoiceAgent({
+    ...options(),
+    transcript: "Play the blue toe song",
+    systemPrompt: "Prefer short songs.",
+    libraryCandidates: [song],
+    searchLibrary: async () => { throw new Error("Unnecessary library search"); },
+    complete: async (messages, tools) => {
+      turns++;
+      assert.ok(messages[0].content!.includes("automatic speech-recognition transcript"));
+      assert.ok(messages[0].content!.includes("pronunciation"));
+      assert.ok(messages[0].content!.includes("Prefer short songs."));
+      assert.equal(tools.some(tool => tool.function.name === "search_library"), false);
+      const snapshot = messages.find(message => message.content?.startsWith('{"localLibrary":'))!;
+      const library = JSON.parse(snapshot.content!).localLibrary;
+      assert.equal(library[0].title, song.title);
+      assert.equal(library[0].artist, song.artist);
+      return call("play_result", { candidateId: library[0].candidateId });
+    }
+  });
+  assert.deepEqual(result, { candidate: song });
+  assert.equal(turns, 1);
+});
+
+test("provided library context permits online fallback without a redundant local search", async () => {
+  for (const libraryCandidates of [[], [song]]) {
+    let turns = 0;
+    let searches = 0;
+    const result = await runVoiceAgent({
+      ...options(),
+      libraryCandidates,
+      searchYoutube: async () => { searches++; return []; },
+      complete: async () => ++turns === 1
+        ? call("search_youtube", { query: "Uranus song", scope: "preferred" })
+        : call("finish_without_playing", { reason: "no_match" })
+    });
+    assert.equal(searches, 1);
+    assert.ok("reason" in result);
+  }
+});
+
+test("full-library mode still rejects invented playback IDs and unavailable search tools", async () => {
+  for (const action of [call("play_result", { candidateId: "invented" }), call("search_library", { query: "Pluto" })]) {
+    let searches = 0;
+    const result = await runVoiceAgent({
+      ...options(),
+      libraryCandidates: [song],
+      searchLibrary: async () => { searches++; return [song]; },
+      complete: async () => action
+    });
+    assert.ok("reason" in result);
+    assert.equal(searches, 0);
+  }
+});

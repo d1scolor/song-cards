@@ -1,5 +1,6 @@
 import path from "node:path";
-import { VoiceOperationError } from "@/lib/voice-errors";
+import { VoiceOperationError, type SpeakerOperation } from "@/lib/voice-errors";
+import { abortableDelay } from "@/lib/async-deadline";
 import { config } from "@/lib/config";
 import { effectiveVolume, songCompensation } from "@/lib/loudness";
 import {
@@ -135,6 +136,20 @@ async function ownToneRequest(
   init?: RequestInit,
   allowEmpty = false
 ) {
+  const operations: Record<string, SpeakerOperation> = {
+    "/api/outputs/set": "output_selection",
+    "/api/player/volume": "volume",
+    "/api/library/files": "library_lookup",
+    "/api/library": "library_status",
+    "/api/queue/items/add": "queue_add",
+    "/api/player/play": "play",
+    "/api/player/pause": "pause",
+    "/api/player/stop": "stop",
+    "/api/player/seek": "seek",
+    "/api/player": "status",
+    "/api/queue": "queue_status",
+    "/api/update": "scan"
+  };
   const response = await fetch(`${config.ownToneUrl}${pathname}`, {
     ...init,
     cache: "no-store",
@@ -144,14 +159,15 @@ async function ownToneRequest(
     throw new VoiceOperationError(
       "speaker_http_error",
       response.status,
-      `OwnTone returned ${response.status} for ${pathname.split("?")[0]}.`
+      `OwnTone returned ${response.status} for ${pathname.split("?")[0]}.`,
+      operations[pathname.split("?")[0]] ?? "other"
     );
   }
   if (allowEmpty || response.status === 204) return null;
   return response.json();
 }
 
-async function ownToneStatus(): Promise<PlayerStatus> {
+async function ownToneStatus(strict = false): Promise<PlayerStatus> {
   try {
     const [player, queue] = await Promise.all([
       ownToneRequest("/api/player"),
@@ -205,6 +221,7 @@ async function ownToneStatus(): Promise<PlayerStatus> {
       compensation
     };
   } catch (error) {
+    if (strict) throw error;
     const settings = getPlaybackSettings();
     return {
       backend: "owntone",
@@ -245,9 +262,7 @@ async function findOwnToneTrackUri(filename: string) {
     (track: { path?: string }) => path.basename(track.path ?? "") === filename
   );
   if (!item?.uri) {
-    throw new Error(
-      "The uploaded song is not indexed by OwnTone yet. Try again after its library scan."
-    );
+    throw new VoiceOperationError("speaker_track_missing");
   }
   return item.uri as string;
 }
@@ -284,6 +299,8 @@ export async function playSong(song: Song, options: { signal?: AbortSignal } = {
     );
   }
 
+  const signal = options.signal ?? new AbortController().signal;
+  await waitForOwnToneLibraryIdle(signal, Date.now() + 10000);
   await selectConfiguredOutput();
   options.signal?.throwIfAborted();
   await setOwnToneVolume(adjustedVolume);
@@ -300,9 +317,34 @@ export async function playSong(song: Song, options: { signal?: AbortSignal } = {
     const seek = new URLSearchParams({ position_ms: String(song.startMs) });
     await ownToneRequest(`/api/player/seek?${seek}`, { method: "PUT" }, true);
   }
-  const status = await ownToneStatus();
-  if (status.state === "play") startEndMonitor();
-  return status;
+  // Queue mutation can finish before the player changes state. Confirm both the
+  // selected track and transport state instead of reporting a paused song as playing.
+  const startedAt = Date.now();
+  let resumed = false;
+  while (true) {
+    signal.throwIfAborted();
+    const status = await ownToneStatus(true);
+    signal.throwIfAborted();
+    if (status.state === "play" && status.song?.id === song.id) {
+      startEndMonitor();
+      return status;
+    }
+    const elapsed = Date.now() - startedAt;
+    if (elapsed >= 4000) throw new VoiceOperationError("speaker_not_playing");
+    if (
+      !resumed &&
+      elapsed >= 400 &&
+      status.state === "pause" &&
+      status.song?.id === song.id
+    ) {
+      // Resume only this request's selected song, once. Never replay the queue
+      // mutation after a 500, or resume a different track during cancellation.
+      signal.throwIfAborted();
+      resumed = true;
+      await ownToneRequest("/api/player/play", { method: "PUT" }, true);
+    }
+    await abortableDelay(200, signal);
+  }
 }
 
 async function setOwnToneVolume(volume: number) {
@@ -440,19 +482,43 @@ export async function triggerOwnToneScan() {
 
 export async function waitForOwnToneSong(song: Song, signal: AbortSignal) {
   if (config.playbackBackend !== "owntone") return;
-  await triggerOwnToneScan();
   const deadline = Date.now() + 30_000;
-  let lastError: unknown;
+  let requestedScan = false;
   while (Date.now() < deadline) {
     signal.throwIfAborted();
+    await waitForOwnToneLibraryIdle(signal, deadline);
     try {
       await findOwnToneTrackUri(song.filename);
+      signal.throwIfAborted();
       return;
     } catch (error) {
-      lastError = error;
-      await new Promise<void>((resolve) => setTimeout(resolve, 500));
+      if (
+        !(error instanceof VoiceOperationError) ||
+        error.code !== "speaker_track_missing"
+      )
+        throw error;
+      if (!requestedScan) {
+        signal.throwIfAborted();
+        await triggerOwnToneScan();
+        requestedScan = true;
+      }
+      await abortableDelay(500, signal);
     }
   }
-  if (lastError instanceof VoiceOperationError) throw lastError;
   throw new VoiceOperationError("speaker_index_timeout");
+}
+
+async function waitForOwnToneLibraryIdle(signal: AbortSignal, deadline: number) {
+  while (Date.now() < deadline) {
+    signal.throwIfAborted();
+    const library = await ownToneRequest("/api/library");
+    signal.throwIfAborted();
+    if (typeof library?.updating !== "boolean")
+      throw new VoiceOperationError(
+        "invalid_response", undefined, undefined, "library_status"
+      );
+    if (!library.updating) return;
+    await abortableDelay(250, signal);
+  }
+  throw new VoiceOperationError("speaker_scan_timeout");
 }

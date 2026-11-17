@@ -62,7 +62,7 @@ export function agentTools(online: boolean) {
       : []),
     tool(
       "play_result",
-      "Select a song from this request's search results.",
+      "Select a song from the provided local library or this request's search results.",
       "candidateId"
     ),
     tool(
@@ -123,6 +123,7 @@ export async function runVoiceAgent(input: {
   ) => Promise<unknown>;
   searchLibrary: (query: string) => Promise<VoiceCandidate[]>;
   libraryHints?: () => string[];
+  libraryCandidates?: Extract<VoiceCandidate, { source: "library" }>[];
   searchYoutube: (
     query: string,
     signal: AbortSignal,
@@ -132,6 +133,19 @@ export async function runVoiceAgent(input: {
   onDecision?: () => void;
   onInvalidAction?: () => void;
 }): Promise<AgentDecision> {
+  const candidates = new Map<string, VoiceCandidate>();
+  const localLibrary = input.libraryCandidates?.slice(0, 270).map(
+    (candidate, index) => {
+      const candidateId = `local-${index + 1}`;
+      candidates.set(candidateId, candidate);
+      return {
+        candidateId,
+        title: candidate.title.slice(0, 120),
+        artist: candidate.artist.slice(0, 120),
+        durationSeconds: Math.round(candidate.durationMs / 1000)
+      };
+    }
+  );
   const messages: AgentMessage[] = [
     {
       role: "system",
@@ -149,10 +163,12 @@ export async function runVoiceAgent(input: {
           }
         ]
       : []),
-    { role: "user", content: input.transcript }
+    ...(localLibrary !== undefined
+      ? [{ role: "user" as const, content: JSON.stringify({ localLibrary }) }]
+      : []),
+    { role: "user", content: `Speech-recognition transcript: ${input.transcript}` }
   ];
-  const candidates = new Map<string, VoiceCandidate>();
-  let searchedLocal = false;
+  let searchedLocal = localLibrary !== undefined;
   const signal = AbortSignal.any([input.signal, AbortSignal.timeout(60_000)]);
   for (let turn = 0; turn < 4; turn++) {
     signal.throwIfAborted();
@@ -161,9 +177,10 @@ export async function runVoiceAgent(input: {
       (item) =>
         !(
           item.function.name === "search_library" &&
-          searchedLocal &&
-          input.libraryHints &&
-          input.libraryHints().length === 0
+          (localLibrary !== undefined ||
+            (searchedLocal &&
+              input.libraryHints &&
+              input.libraryHints().length === 0))
         ) &&
         (item.function.name !== "play_result" || candidates.size > 0) &&
         (turn < 3 ||
@@ -251,6 +268,7 @@ export async function runVoiceAgent(input: {
     ).safeParse(args);
     if (
       !query.success ||
+      (name === "search_library" && localLibrary !== undefined) ||
       (name === "search_youtube" && (!input.online || !searchedLocal))
     ) {
       input.onInvalidAction?.();

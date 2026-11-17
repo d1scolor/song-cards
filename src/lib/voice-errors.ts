@@ -38,8 +38,14 @@ export const voiceErrorDescriptions = {
     "FFmpeg/FFprobe could not prepare or analyze the downloaded audio.",
   speaker_http_error:
     "OwnTone rejected a request; check the HTTP status and OwnTone container logs.",
+  speaker_not_playing:
+    "OwnTone accepted the queue request but did not start the selected song.",
   speaker_index_timeout:
     "The downloaded file was not indexed by OwnTone within 30 seconds; check the shared media volume and OwnTone library directory.",
+  speaker_track_missing:
+    "The selected song is not in OwnTone's indexed media directory.",
+  speaker_scan_timeout:
+    "OwnTone's library scan did not finish before the playback deadline.",
   invalid_model_action:
     "The model returned prose or an invalid action instead of one supported tool action.",
   operation_failed:
@@ -47,11 +53,28 @@ export const voiceErrorDescriptions = {
 } as const;
 
 export type VoiceErrorCode = keyof typeof voiceErrorDescriptions;
+export const speakerOperations = [
+  "output_selection",
+  "volume",
+  "library_lookup",
+  "queue_add",
+  "play",
+  "pause",
+  "stop",
+  "seek",
+  "status",
+  "queue_status",
+  "scan",
+  "library_status",
+  "other"
+] as const;
+export type SpeakerOperation = (typeof speakerOperations)[number];
 export class VoiceOperationError extends Error {
   constructor(
     readonly code: VoiceErrorCode,
     readonly httpStatus?: number,
-    message?: string
+    message?: string,
+    readonly speakerOperation?: SpeakerOperation
   ) {
     super(message ?? voiceErrorDescriptions[code]);
     this.name = "VoiceOperationError";

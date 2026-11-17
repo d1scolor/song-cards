@@ -2,6 +2,8 @@ import { CommandError } from "@/lib/command";
 import {
   VoiceOperationError,
   voiceErrorDescriptions,
+  speakerOperations,
+  type SpeakerOperation,
   type VoiceErrorCode
 } from "@/lib/voice-errors";
 
@@ -10,6 +12,7 @@ export type VoiceDiagnosticPhase =
   | "transcription"
   | "selection"
   | "library_search"
+  | "library_context"
   | "youtube_search"
   | "download"
   | "audio_processing"
@@ -29,6 +32,7 @@ export type VoiceDiagnosticDetails = {
   durationMs?: number;
   playerState?: "play" | "pause" | "stop";
   connected?: boolean;
+  speakerOperation?: SpeakerOperation;
 };
 export type VoiceDiagnosticEvent = VoiceDiagnosticDetails & {
   at: string;
@@ -130,6 +134,11 @@ export function recordVoiceDiagnostic(
     safe.playerState = details.playerState;
   if (typeof details.connected === "boolean")
     safe.connected = details.connected;
+  if (
+    details.speakerOperation &&
+    speakerOperations.includes(details.speakerOperation)
+  )
+    safe.speakerOperation = details.speakerOperation;
   const entry = { at: now, phase, event, ...safe };
   record.events.push(entry);
   if (record.events.length > 40) record.events.shift();

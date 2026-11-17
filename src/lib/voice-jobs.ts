@@ -6,6 +6,7 @@ import {
   findSongById,
   getPlaybackSettings,
   searchVoiceSongs,
+  listVoiceSongs,
   voiceLibraryHints,
   touchVoiceCachedSong
 } from "@/lib/repository";
@@ -21,7 +22,7 @@ import {
   type VoiceDiagnosticPhase,
   type VoiceDiagnosticDetails
 } from "@/lib/voice-diagnostics";
-import type { VoiceErrorCode } from "@/lib/voice-errors";
+import type { VoiceErrorCode, SpeakerOperation } from "@/lib/voice-errors";
 
 type Stage =
   | "transcribing"
@@ -50,6 +51,7 @@ type Job = {
     phase: VoiceDiagnosticPhase;
     code: VoiceErrorCode;
     httpStatus?: number;
+    speakerOperation?: SpeakerOperation;
   };
 };
 declare global {
@@ -185,12 +187,22 @@ export function startVoiceJob(
         return;
       }
       stage(job, "deciding", "Finding a song for you…");
+      begin("library_context");
+      const libraryCandidates = listVoiceSongs().map((song) => ({
+        source: "library" as const,
+        songId: song.id,
+        title: song.title,
+        artist: song.artist,
+        durationMs: song.durationMs
+      }));
+      complete({ resultCount: libraryCandidates.length });
       const decision = await runVoiceAgent({
         transcript,
         online: settings.onlineEnabled,
         context: { currentSong, preferredChannels: settings.preferredChannels },
         language: settings.language,
         systemPrompt: settings.systemPrompt,
+        libraryCandidates,
         signal,
         complete: async (messages, tools, requestSignal) => {
           begin("selection");
@@ -278,6 +290,9 @@ export function startVoiceJob(
         job.failure = {
           phase,
           code: failure.code,
+          ...(failure.speakerOperation
+            ? { speakerOperation: failure.speakerOperation }
+            : {}),
           ...(failure.httpStatus ? { httpStatus: failure.httpStatus } : {})
         };
         recordVoiceDiagnostic(job.id, phase, "failed", job.failure);
@@ -337,6 +352,9 @@ export async function playVoiceJob(id: string) {
       job.failure = {
         phase: "playback",
         code: failure.code,
+        ...(failure.speakerOperation
+          ? { speakerOperation: failure.speakerOperation }
+          : {}),
         ...(failure.httpStatus ? { httpStatus: failure.httpStatus } : {})
       };
       recordVoiceDiagnostic(job.id, "playback", "failed", job.failure);

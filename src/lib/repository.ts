@@ -235,15 +235,20 @@ export function createSongCard(
   return { ...createSong(input), markerId: input.markerId, active: true };
 }
 
-export function searchVoiceSongs(query: string): Song[] {
+export function listVoiceSongs(): Song[] {
   const rows = getDatabase()
     .prepare(
       `SELECT songs.* FROM songs WHERE
     EXISTS (SELECT 1 FROM markers WHERE song_id = songs.id AND active = 1)
-    OR EXISTS (SELECT 1 FROM voice_cache WHERE song_id = songs.id)`
+    OR EXISTS (SELECT 1 FROM voice_cache WHERE song_id = songs.id)
+    ORDER BY title, id LIMIT 270`
     )
     .all() as SongRow[];
-  return rankSongMatches(rows.map(mapSong), query);
+  return rows.map(mapSong);
+}
+
+export function searchVoiceSongs(query: string): Song[] {
+  return rankSongMatches(listVoiceSongs(), query);
 }
 
 export function voiceLibraryHints(): string[] {
