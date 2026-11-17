@@ -1,6 +1,6 @@
 "use client";
 
-import { Mic, RefreshCw, Square } from "lucide-react";
+import { Mic, RefreshCw, Square, X } from "lucide-react";
 import {
   forwardRef,
   useEffect,
@@ -31,6 +31,8 @@ type Session = {
   cleanup?: Promise<void>;
   timers: number[];
   submitted: boolean;
+  frames: Float32Array[];
+  sampleCount: number;
 };
 
 export const VoiceRequest = forwardRef<
@@ -126,6 +128,8 @@ export const VoiceRequest = forwardRef<
   async function releaseMicrophone(session: Session) {
     session.timers.forEach(clearTimeout);
     session.timers = [];
+    session.frames = [];
+    session.sampleCount = 0;
     await releaseVoiceCapture(session);
   }
 
@@ -266,13 +270,34 @@ export const VoiceRequest = forwardRef<
     }
   }
 
+  function recognizeNow() {
+    const session = active.current;
+    if (!session || session.submitted || phase !== "listening") return;
+    if (session.sampleCount < 1600) {
+      void fail(session, "I didn't hear a request. Please try again.");
+      return;
+    }
+    // Manual submission includes the recording even if VAD has not classified
+    // a short word as speech yet. submit claims the session before cleanup, so
+    // a simultaneous silence callback cannot upload the request twice.
+    const samples = new Float32Array(session.sampleCount);
+    let offset = 0;
+    for (const frame of session.frames) {
+      samples.set(frame, offset);
+      offset += frame.length;
+    }
+    void submit(session, samples);
+  }
+
   async function start() {
     if (active.current || cancelling.current || disabled) return;
     const session: Session = {
       controller: new AbortController(),
       jobId: crypto.randomUUID(),
       timers: [],
-      submitted: false
+      submitted: false,
+      frames: [],
+      sampleCount: 0
     };
     active.current = session;
     setPhase("opening");
@@ -362,6 +387,14 @@ export const VoiceRequest = forwardRef<
           minSpeechMs: 400,
           preSpeechPadMs: 500,
           submitUserSpeechOnPause: true,
+          onFrameProcessed: (_probabilities, frame) => {
+            if (active.current !== session || session.submitted) return;
+            const remaining = 30 * 16000 - session.sampleCount;
+            if (remaining <= 0) return;
+            const copy = frame.slice(0, remaining);
+            session.frames.push(copy);
+            session.sampleCount += copy.length;
+          },
           ortConfig: (ort) => {
             ort.env.wasm.numThreads = 1;
           },
@@ -436,30 +469,48 @@ export const VoiceRequest = forwardRef<
   }
 
   return (
-    <button
-      className={`voice-button ${phase !== "idle" ? "voice-button--active" : ""}`}
-      type="button"
-      disabled={disabled && phase === "idle"}
-      onClick={() => {
-        if (phase === "idle") void start();
-        else
-          void cancel().then(() =>
-            callbacks.current.onMessage("Request cancelled.")
-          );
-      }}
-    >
-      {phase === "idle" ? (
-        <Mic size={26} aria-hidden="true" />
-      ) : phase === "listening" ? (
-        <Square size={24} aria-hidden="true" />
-      ) : (
-        <RefreshCw size={24} className="spin" aria-hidden="true" />
+    <div className="voice-controls">
+      <button
+        className={`voice-button ${phase !== "idle" ? "voice-button--active" : ""}`}
+        type="button"
+        disabled={
+          (disabled && phase === "idle") || phase === "opening" || phase === "working"
+        }
+        onClick={() => {
+          if (phase === "idle") void start();
+          else if (phase === "listening") recognizeNow();
+        }}
+      >
+        {phase === "idle" ? (
+          <Mic size={26} aria-hidden="true" />
+        ) : phase === "listening" ? (
+          <Square size={24} aria-hidden="true" />
+        ) : (
+          <RefreshCw size={24} className="spin" aria-hidden="true" />
+        )}
+        {phase === "idle"
+          ? "Ask for a song"
+          : phase === "listening"
+            ? "Tap again to recognize"
+            : phase === "opening"
+              ? "Opening microphone…"
+              : "Recognizing…"}
+      </button>
+      {phase !== "idle" && (
+        <button
+          type="button"
+          className="voice-cancel"
+          aria-label="Cancel voice request"
+          title="Cancel voice request"
+          onClick={() => {
+            void cancel().then(() =>
+              callbacks.current.onMessage("Request cancelled.")
+            );
+          }}
+        >
+          <X size={22} aria-hidden="true" />
+        </button>
       )}
-      {phase === "idle"
-        ? "Ask for a song"
-        : phase === "listening"
-          ? "Listening… · Cancel"
-          : "Cancel request"}
-    </button>
+    </div>
   );
 });

@@ -110,6 +110,9 @@ pauses playback, detects the end of speech locally, and sends a recording of
 up to 30 seconds to the configured ASR service. The VAD model and runtime are
 served by Song Cards; kiosk devices do not load these from a CDN. They are
 copied from dependencies by `predev` and `prebuild`.
+While listening, tap **Tap again to recognize** to submit the recording immediately
+without waiting for silence. The separate **×** button cancels recording or an
+in-progress request.
 
 A small agent receives the full available library (up to 250 card songs plus 20
 cached downloads) as compact candidate IDs, titles, artists and durations. It can
