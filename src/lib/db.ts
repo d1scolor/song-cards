@@ -69,6 +69,11 @@ export function getDatabase() {
   // Releases markers orphaned by versions that retained marker rows after
   // deleting their songs. Existing databases keep their original FK schema.
   next.prepare("DELETE FROM markers WHERE song_id IS NULL").run();
+  const voiceColumns = next.prepare("PRAGMA table_info(voice_cache)").all() as {
+    name: string;
+  }[];
+  if (!voiceColumns.some((column) => column.name === "metadata_json"))
+    next.exec("ALTER TABLE voice_cache ADD COLUMN metadata_json TEXT");
 
   const songColumns = next
     .prepare("PRAGMA table_info(songs)")

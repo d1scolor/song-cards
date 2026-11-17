@@ -136,10 +136,26 @@ responses are never displayed as a no-play decision; those use fixed reason code
 Download limits apply in yt-dlp. After download, usable audio proceeds to playback
 without rejecting differences between search and download metadata or repeating
 the voice download's size check.
-The agent gets four
+The agent gets six
 model turns and at most three searches to select a returned result or explicitly
 finish without playing. It can only choose IDs supplied in its library snapshot
 or search results, never arbitrary playback URLs or commands.
+
+Voice requests include the last three requests and selections from the same kiosk
+tab, with playback outcomes. This conversation context expires after 15 minutes
+of inactivity or server restart; it is isolated from other kiosk sessions. Follow-up
+corrections such as “another one” or “by KLT” keep the earlier topic. The agent's
+`reject_previous` action excludes the rejected selection and cached copies from
+that request; explicit replay and unrelated requests may still select it.
+
+Requests can specify artists, channels, versions, albums, lyric fragments and
+popularity preferences. YouTube results distinguish recording artist, channel and
+uploader, and include view counts when available. Views are not Song Cards play
+counts. Optional `inspect_results` lookups fetch fuller metadata for at most
+three known videos without downloading audio. Metadata lookups are cached for
+15 minutes, bounded to 100 entries, and failures do not block selecting a song.
+Public metadata is saved with cached voice downloads so creator information and
+video identity survive a restart. Existing cache entries migrate automatically.
 
 Online selections are downloaded before playback. The 20 most recently used
 voice downloads are retained in a separate cache and found by future local
@@ -161,7 +177,8 @@ paused. Pausing an idle OwnTone speaker is a no-op, and a speaker pause failure
 does not block microphone capture.
 Recordings are not retained by Song Cards. ASR transcripts are kept only in the
 bounded in-memory admin activity history (last 20 requests, cleared on restart),
-not in container logs or ordinary kiosk job responses. The configured
+and short-lived per-session conversation context, not in container logs or ordinary
+kiosk job responses. The configured
 ASR and LLM services receive them and control their own retention. Job status
 contains stage timings for diagnosing delays, and expires when the app restarts
 or the bounded in-memory job history is pruned.

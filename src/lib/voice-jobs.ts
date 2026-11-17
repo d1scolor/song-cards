@@ -1,12 +1,23 @@
 import { runVoiceAgent } from "@/lib/voice-agent";
 import { completeVoice, transcribeVoice } from "@/lib/voice-services";
 import { getVoiceSettings } from "@/lib/voice-settings";
-import { prepareVoiceYoutube, searchVoiceYoutube } from "@/lib/voice-youtube";
+import {
+  prepareVoiceYoutube,
+  searchVoiceYoutube,
+  inspectVoiceYoutube
+} from "@/lib/voice-youtube";
+import {
+  beginVoiceTurn,
+  updateVoiceTurn,
+  voiceSessionHistory
+} from "@/lib/voice-session";
 import {
   findSongById,
   getPlaybackSettings,
   searchVoiceSongs,
   listVoiceSongs,
+  voiceCachedSources,
+  updateVoiceCachedMetadata,
   voiceLibraryHints,
   touchVoiceCachedSong
 } from "@/lib/repository";
@@ -42,6 +53,7 @@ type Job = {
   message: string;
   createdAt: number;
   controller: AbortController;
+  sessionId?: string;
   song?: Song;
   playback?: Promise<KioskPlaybackResult>;
   timings: { stage: Stage; durationMs: number }[];
@@ -74,6 +86,17 @@ function stage(job: Job, next: Stage, message: string) {
   job.stageStartedAt = Date.now();
   job.stage = next;
   job.message = message;
+  const outcomes = {
+    ready: "ready",
+    complete: "playback_requested",
+    declined: "declined",
+    error: "failed",
+    cancelled: "cancelled"
+  } as const;
+  if (next in outcomes)
+    updateVoiceTurn(job.sessionId, job.id, {
+      outcome: outcomes[next as keyof typeof outcomes]
+    });
   if (terminal.has(next)) clearTimeout(job.timer);
 }
 
@@ -120,8 +143,9 @@ export async function cancelAllVoiceJobs() {
 
 export function startVoiceJob(
   audio: File,
-  currentSong?: { title: string; artist: string },
-  requestId?: string
+  currentSong?: { id?: string; title: string; artist: string },
+  requestId?: string,
+  sessionId?: string
 ) {
   for (const [id, time] of cancelledRequests)
     if (Date.now() - time > 180000) cancelledRequests.delete(id);
@@ -142,7 +166,7 @@ export function startVoiceJob(
       "Another voice request is in progress. Please try again shortly."
     );
   }
-  // Keep only a small number of completed requests; no transcripts are stored.
+  // Jobs omit transcripts; admin diagnostics and short-lived sessions retain them separately.
   while (jobs.size >= 20) jobs.delete(jobs.keys().next().value!);
   const now = Date.now();
   const job: Job = {
@@ -151,6 +175,7 @@ export function startVoiceJob(
     message: "Listening to your words…",
     createdAt: now,
     controller: new AbortController(),
+    sessionId,
     timings: [],
     stageStartedAt: now
   };
@@ -182,6 +207,8 @@ export function startVoiceJob(
       const transcript = await transcribeVoice(audio, settings, signal);
       signal.throwIfAborted();
       recordVoiceTranscript(job.id, transcript);
+      const recentRequests = voiceSessionHistory(sessionId);
+      beginVoiceTurn(sessionId, job.id, transcript);
       complete();
       if (!transcript) {
         recordVoiceDiagnostic(job.id, "transcription", "declined");
@@ -190,18 +217,65 @@ export function startVoiceJob(
       }
       stage(job, "deciding", "Finding a song for you…");
       begin("library_context");
+      const cachedSources = voiceCachedSources();
       const libraryCandidates = listVoiceSongs().map((song) => ({
         source: "library" as const,
         songId: song.id,
         title: song.title,
         artist: song.artist,
-        durationMs: song.durationMs
+        durationMs: song.durationMs,
+        ...(cachedSources.has(song.id)
+          ? {
+              videoId: cachedSources.get(song.id)!.videoId,
+              ...(cachedSources.get(song.id)!.metadata ?? {
+                artist: "",
+                channel: song.artist
+              })
+            }
+          : {})
       }));
       complete({ resultCount: libraryCandidates.length });
       const decision = await runVoiceAgent({
         transcript,
         online: settings.onlineEnabled,
-        context: { currentSong, preferredChannels: settings.preferredChannels },
+        context: {
+          currentSong,
+          preferredChannels: settings.preferredChannels,
+          recentRequests
+        },
+        onRejectPrevious: (request) => {
+          updateVoiceTurn(sessionId, request, { rejected: true });
+          recordVoiceDiagnostic(job.id, "selection", "rejected_previous");
+        },
+        inspectCandidate: async (candidate, requestSignal) => {
+          if (!candidate.videoId) return undefined;
+          recordVoiceDiagnostic(job.id, "metadata_lookup", "start", {
+            videoId: candidate.videoId
+          });
+          const startedAt = Date.now();
+          try {
+            const metadata = await inspectVoiceYoutube(
+              candidate.videoId,
+              requestSignal
+            );
+            requestSignal.throwIfAborted();
+            updateVoiceCachedMetadata(candidate.videoId, metadata);
+            recordVoiceDiagnostic(job.id, "metadata_lookup", "complete", {
+              videoId: candidate.videoId,
+              durationMs: Date.now() - startedAt
+            });
+            return metadata;
+          } catch (error) {
+            requestSignal.throwIfAborted();
+            const failure = voiceFailure(error);
+            recordVoiceDiagnostic(job.id, "metadata_lookup", "failed", {
+              videoId: candidate.videoId,
+              code: failure.code,
+              ...(failure.httpStatus ? { httpStatus: failure.httpStatus } : {})
+            });
+            return undefined;
+          }
+        },
         language: settings.language,
         systemPrompt: settings.systemPrompt,
         libraryCandidates,
@@ -256,6 +330,7 @@ export function startVoiceJob(
       }
       stage(job, "preparing", "Getting your song ready…");
       const candidate = decision.candidate;
+      updateVoiceTurn(sessionId, job.id, { selected: candidate });
       recordVoiceDiagnostic(job.id, "selection", "complete", {
         source: candidate.source,
         ...(candidate.source === "youtube"
@@ -336,6 +411,8 @@ export async function playVoiceJob(id: string) {
     const result = await job.playback;
     job.controller.signal.throwIfAborted();
     stage(job, "complete", `${job.song.title} is playing!`);
+    if (result.playbackTarget === "owntone")
+      updateVoiceTurn(job.sessionId, job.id, { outcome: "playing" });
     recordVoiceDiagnostic(
       job.id,
       "playback",
@@ -365,4 +442,12 @@ export async function playVoiceJob(id: string) {
       stage(job, "error", "Playback could not be started. Please try again.");
     throw new Error("Playback could not be started. Please try again.");
   }
+}
+
+export function confirmVoicePlayback(id: string) {
+  const job = jobs.get(id);
+  if (!job || job.stage !== "complete" || job.controller.signal.aborted)
+    return false;
+  updateVoiceTurn(job.sessionId, job.id, { outcome: "playing" });
+  return true;
 }

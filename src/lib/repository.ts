@@ -3,6 +3,7 @@ import path from "node:path";
 import { coverDirectory, getDatabase, mediaDirectory } from "@/lib/db";
 import { config } from "@/lib/config";
 import { rankSongMatches } from "@/lib/song-search";
+import type { VoiceMetadata } from "@/lib/voice-metadata";
 import type {
   LoudnessAnalysis,
   PlaybackSettings,
@@ -274,13 +275,26 @@ export function findVoiceCachedSong(videoId: string): Song | null {
   return findSongById(row.song_id);
 }
 
-export function cacheVoiceSong(videoId: string, song: Song) {
+export function voiceCachedSources() {
+  const rows = getDatabase()
+    .prepare("SELECT video_id, song_id, metadata_json FROM voice_cache")
+    .all() as { video_id: string; song_id: string; metadata_json: string | null }[];
+  return new Map(rows.map(row => {
+    let metadata: VoiceMetadata | undefined;
+    try {
+      if (row.metadata_json) metadata = JSON.parse(row.metadata_json);
+    } catch { /* legacy metadata remains unknown */ }
+    return [row.song_id, { videoId: row.video_id, metadata }] as const;
+  }));
+}
+
+export function cacheVoiceSong(videoId: string, song: Song, metadata?: VoiceMetadata) {
   const database = getDatabase();
   database
     .prepare(
-      "INSERT INTO voice_cache (video_id, song_id, last_used_at) VALUES (?, ?, ?)"
+      "INSERT INTO voice_cache (video_id, song_id, last_used_at, metadata_json) VALUES (?, ?, ?, ?)"
     )
-    .run(videoId, song.id, Date.now());
+    .run(videoId, song.id, Date.now(), metadata ? JSON.stringify(metadata) : null);
   const expired = database
     .prepare(
       `SELECT song_id FROM voice_cache
@@ -296,6 +310,19 @@ export function voiceCacheCount() {
       .prepare("SELECT count(*) AS count FROM voice_cache")
       .get() as { count: number }
   ).count;
+}
+
+export function updateVoiceCachedMetadata(videoId: string, metadata: VoiceMetadata) {
+  const database = getDatabase();
+  database.transaction(() => {
+    database
+      .prepare("UPDATE voice_cache SET metadata_json = ? WHERE video_id = ?")
+      .run(JSON.stringify(metadata), videoId);
+    if (metadata.artist)
+      database
+        .prepare("UPDATE songs SET artist = ? WHERE id IN (SELECT song_id FROM voice_cache WHERE video_id = ?)")
+        .run(metadata.artist, videoId);
+  })();
 }
 
 export function touchVoiceCachedSong(songId: string) {

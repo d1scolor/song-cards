@@ -32,6 +32,7 @@ type ScanStage =
 type ScannedSong = {
   id: string | null;
   title: string;
+  artist?: string;
   coverUrl: string | null;
 };
 
@@ -95,6 +96,7 @@ export function Scanner({
       if (
         current?.id === song.id &&
         current?.title === song.title &&
+        current?.artist === song.artist &&
         current?.coverUrl === coverUrl
       ) {
         return current;
@@ -102,6 +104,7 @@ export function Scanner({
       return {
         id: song.id,
         title: song.title,
+        artist: song.artist,
         coverUrl
       };
     });
@@ -198,6 +201,7 @@ export function Scanner({
         setLastSong({
           id: body.song.id ?? null,
           title: body.song.title,
+          artist: body.song.artist,
           coverUrl: body.song.coverUrl ?? null
         });
         setStage("success");
@@ -430,11 +434,12 @@ export function Scanner({
             currentSong={
               localPlayer.track
                 ? {
+                    id: localPlayer.track.id,
                     title: localPlayer.track.title,
                     artist: localPlayer.track.artist
                   }
                 : lastSong
-                  ? { title: lastSong.title, artist: "" }
+                  ? { ...(lastSong.id ? { id: lastSong.id } : {}), title: lastSong.title, artist: lastSong.artist ?? "" }
                   : undefined
             }
             onBusy={(busy) => {
@@ -484,6 +489,7 @@ export function Scanner({
               setLastSong({
                 id: body.song.id,
                 title: body.song.title,
+                artist: body.song.artist,
                 coverUrl: body.song.coverUrl
               });
               setStage("success");

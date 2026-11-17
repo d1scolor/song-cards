@@ -51,6 +51,12 @@ export async function POST(request: NextRequest) {
     }).formData();
     const audio = form.get("audio");
     const requestId = form.get("requestId");
+    const sessionId = form.get("sessionId");
+    if (sessionId !== null && !z.string().uuid().safeParse(sessionId).success)
+      return NextResponse.json(
+        { error: "Invalid session ID." },
+        { status: 400 }
+      );
     if (requestId !== null && !z.string().uuid().safeParse(requestId).success)
       return NextResponse.json(
         { error: "Invalid request ID." },
@@ -69,7 +75,11 @@ export async function POST(request: NextRequest) {
     const parsedContext =
       typeof context === "string" && context.length <= 1000
         ? z
-            .object({ title: z.string().max(120), artist: z.string().max(120) })
+            .object({
+              id: z.string().max(120).optional(),
+              title: z.string().max(120),
+              artist: z.string().max(120)
+            })
             .strict()
             .safeParse(JSON.parse(context))
         : undefined;
@@ -79,7 +89,8 @@ export async function POST(request: NextRequest) {
           startVoiceJob(
             audio,
             parsedContext?.success ? parsedContext.data : undefined,
-            typeof requestId === "string" ? requestId : undefined
+            typeof requestId === "string" ? requestId : undefined,
+            typeof sessionId === "string" ? sessionId : undefined
           )
         )
       },

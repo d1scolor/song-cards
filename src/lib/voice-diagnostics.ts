@@ -14,6 +14,7 @@ export type VoiceDiagnosticPhase =
   | "library_search"
   | "library_context"
   | "youtube_search"
+  | "metadata_lookup"
   | "download"
   | "audio_processing"
   | "speaker_indexing"
@@ -43,6 +44,7 @@ export type VoiceDiagnosticEvent = VoiceDiagnosticDetails & {
     | "failed"
     | "declined"
     | "invalid_action"
+    | "rejected_previous"
     | "cancelled";
 };
 export type VoiceDiagnosticRecord = {

@@ -47,7 +47,7 @@ export const VoiceRequest = forwardRef<
       result: KioskPlaybackResult,
       signal: AbortSignal
     ) => Promise<void>;
-    currentSong?: { title: string; artist: string };
+    currentSong?: { id?: string; title: string; artist: string };
   }
 >(function VoiceRequest(
   { disabled, beforeStart, onNoPlay, onBusy, onMessage, onPlayed, currentSong },
@@ -55,6 +55,7 @@ export const VoiceRequest = forwardRef<
 ) {
   const active = useRef<Session | null>(null);
   const cancelling = useRef<Promise<void> | null>(null);
+  const conversation = useRef<string | undefined>(undefined);
   const callbacks = useRef({
     beforeStart,
     onNoPlay,
@@ -190,6 +191,22 @@ export const VoiceRequest = forwardRef<
       const form = new FormData();
       session.jobId ??= crypto.randomUUID();
       form.set("requestId", session.jobId);
+      if (!conversation.current) {
+        try {
+          const stored = sessionStorage.getItem("song-cards-voice-session");
+          conversation.current =
+            stored && /^[a-f\d-]{36}$/i.test(stored)
+              ? stored
+              : crypto.randomUUID();
+          sessionStorage.setItem(
+            "song-cards-voice-session",
+            conversation.current
+          );
+        } catch {
+          conversation.current = crypto.randomUUID();
+        }
+      }
+      form.set("sessionId", conversation.current);
       if (currentSong) form.set("currentSong", JSON.stringify(currentSong));
       form.set(
         "audio",
@@ -243,6 +260,11 @@ export const VoiceRequest = forwardRef<
             signal,
             "The song is ready. Tap play in the player to start it."
           );
+          if (active.current === session)
+            await fetch(`/api/voice/${session.jobId}/played`, {
+              method: "POST",
+              signal: AbortSignal.any([signal, AbortSignal.timeout(3000)])
+            }).catch(() => undefined);
           break;
         }
         if (status.job.stage === "declined") {
@@ -357,14 +379,16 @@ export const VoiceRequest = forwardRef<
       );
       session.context = await step(
         "audio_context",
-        compatibleCaptureContext(stream, session.context).then(async (context) => {
-          if (active.current !== session) {
-            await context.close().catch(() => undefined);
-            throw new DOMException("Cancelled", "AbortError");
+        compatibleCaptureContext(stream, session.context).then(
+          async (context) => {
+            if (active.current !== session) {
+              await context.close().catch(() => undefined);
+              throw new DOMException("Cancelled", "AbortError");
+            }
+            session.context = context;
+            return context;
           }
-          session.context = context;
-          return context;
-        }),
+        ),
         10000
       );
       const { MicVAD } = await step(
@@ -474,7 +498,9 @@ export const VoiceRequest = forwardRef<
         className={`voice-button ${phase !== "idle" ? "voice-button--active" : ""}`}
         type="button"
         disabled={
-          (disabled && phase === "idle") || phase === "opening" || phase === "working"
+          (disabled && phase === "idle") ||
+          phase === "opening" ||
+          phase === "working"
         }
         onClick={() => {
           if (phase === "idle") void start();

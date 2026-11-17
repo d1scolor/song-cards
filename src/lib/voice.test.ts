@@ -381,3 +381,38 @@ test("service failures preserve their failing stage and status without recording
     assert.equal("transcript" in publicVoiceJob(result), false);
   }
 });
+
+test("voice history records playback outcomes per session and confirms device playback only after acknowledgement", async () => {
+  saveVoiceSettings(defaults);
+  updatePlaybackSettings({ kioskPlaybackTarget: "local" });
+  mockServices();
+  const { voiceSessionHistory } = await import("@/lib/voice-session");
+  const { NextRequest } = await import("next/server");
+  const { POST: played } = await import("@/app/api/voice/[jobId]/played/route");
+  const sessionId = crypto.randomUUID();
+  const job = startVoiceJob(recording(), undefined, undefined, sessionId);
+  assert.equal((await settled(job.id)).stage, "ready");
+  assert.equal(voiceSessionHistory(sessionId)[0].outcome, "ready");
+  await playVoiceJob(job.id);
+  assert.equal(voiceSessionHistory(sessionId)[0].outcome, "playback_requested");
+  const request = new NextRequest(`http://localhost:3000/api/voice/${job.id}/played`, { method: "POST", headers: { host: "localhost:3000", origin: "http://localhost:3000" } });
+  assert.equal((await played(request, { params: Promise.resolve({ jobId: job.id }) })).status, 204);
+  assert.equal(voiceSessionHistory(sessionId)[0].outcome, "playing");
+  const fixtureFetch = globalThis.fetch;
+  let modelContext = "";
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes("llm.test")) modelContext = String(init?.body);
+    return fixtureFetch(url, init);
+  };
+  const next = startVoiceJob(recording(), undefined, undefined, sessionId);
+  assert.equal((await settled(next.id)).stage, "ready");
+  assert.ok(modelContext.includes("recentRequests"));
+  assert.ok(modelContext.includes("Play Pluto"));
+  assert.equal(modelContext.includes(job.id), false);
+  await cancelVoiceJob(next.id);
+  assert.equal(voiceSessionHistory(sessionId).at(-1)?.outcome, "cancelled");
+  const other = startVoiceJob(recording(), undefined, undefined, crypto.randomUUID());
+  assert.equal((await settled(other.id)).stage, "ready");
+  assert.ok(modelContext.includes('recentRequests\\\":[]'));
+  await cancelVoiceJob(other.id);
+});

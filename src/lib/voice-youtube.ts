@@ -16,6 +16,11 @@ import type { VoiceSettings } from "@/lib/voice-settings";
 import type { VoiceCandidate } from "@/lib/voice-agent";
 import { VoiceOperationError } from "@/lib/voice-errors";
 import { voiceFailure } from "@/lib/voice-diagnostics";
+import {
+  youtubeMetadata,
+  modelVoiceMetadata,
+  type VoiceMetadata
+} from "@/lib/voice-metadata";
 
 type YoutubeCandidate = Extract<VoiceCandidate, { source: "youtube" }>;
 const videoPattern = /^[\w-]{11}$/;
@@ -52,7 +57,8 @@ export function parseYoutubeResults(
         videoId: entry.id,
         channelId: entry.channel_id,
         title: entry.title.slice(0, 120),
-        artist: String(entry.channel ?? "").slice(0, 120),
+        ...youtubeMetadata(entry),
+        artist: youtubeMetadata(entry).artist ?? "",
         durationMs: Math.round(entry.duration * 1000)
       }
     ];
@@ -217,13 +223,13 @@ export async function prepareVoiceYoutube(
     signal.throwIfAborted();
     const song = createSong({
       title: candidate.title,
-      artist: candidate.artist,
+      artist: candidate.artist || candidate.channel || candidate.uploader || "",
       ...stored,
       originalName: "voice-request.m4a",
       coverFilename: null
     });
     songId = song.id;
-    cacheVoiceSong(candidate.videoId, song);
+    cacheVoiceSong(candidate.videoId, song, modelVoiceMetadata(candidate));
     return song;
   } catch (error) {
     if (songId) deleteSongCard(songId);
@@ -237,4 +243,49 @@ export async function prepareVoiceYoutube(
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }
+}
+
+declare global {
+  var __songCardsVoiceMetadata:
+    Map<string, { at: number; metadata: VoiceMetadata }> | undefined;
+}
+const metadataCache = (globalThis.__songCardsVoiceMetadata ??= new Map());
+export async function inspectVoiceYoutube(
+  videoId: string,
+  signal: AbortSignal
+): Promise<VoiceMetadata> {
+  if (!videoPattern.test(videoId)) throw new Error("Invalid video selection.");
+  signal.throwIfAborted();
+  const cached = metadataCache.get(videoId);
+  if (cached && Date.now() - cached.at < 15 * 60_000)
+    return { ...cached.metadata };
+  const binary = await voiceYouTubeBinary();
+  const result = await runCommand(
+    binary,
+    [
+      "--ignore-config",
+      "--no-cache-dir",
+      "--no-playlist",
+      "--skip-download",
+      "--dump-single-json",
+      "--socket-timeout",
+      "10",
+      "--retries",
+      "1",
+      "--js-runtimes",
+      "node",
+      "--",
+      `https://www.youtube.com/watch?v=${videoId}`
+    ],
+    { signal, timeoutMs: 15000, maxOutputCharacters: 1500000 }
+  );
+  signal.throwIfAborted();
+  const body = JSON.parse(result.stdout);
+  if (body?.id !== videoId) throw new VoiceOperationError("invalid_response");
+  const metadata = youtubeMetadata(body);
+  metadataCache.delete(videoId);
+  metadataCache.set(videoId, { at: Date.now(), metadata });
+  while (metadataCache.size > 100)
+    metadataCache.delete(metadataCache.keys().next().value!);
+  return { ...metadata };
 }

@@ -42,6 +42,12 @@ codes, HTTP statuses, and selected YouTube video IDs; they exclude recordings,
 transcripts, prompts, credentials, and signed media URLs. ASR transcripts are
 retained separately only in the bounded admin history and its copy/export text,
 cleared on restart or eviction, never in container logs or public job responses.
+The voice agent also receives up to three recent transcripts and selection
+outcomes from the same kiosk tab, held in memory for 15 minutes of inactivity
+and bounded to 100 sessions. Session identifiers isolate context between tabs;
+they do not expand the trusted-LAN authentication boundary. Metadata inspection
+accepts only supplied candidate IDs, with at most three distinct videos per
+request. It passes bounded public metadata to the model, never raw media URLs.
 The same-origin capture
 diagnostic endpoint accepts only bounded, validated fields, never free-form error
 text. Container log retention is controlled by the deployment.
