@@ -17,7 +17,8 @@
     "lint": "eslint .",
     "test": "node --import tsx --test src/**/*.test.ts",
     "predev": "node scripts/prepare-voice-assets.mjs",
-    "prebuild": "node scripts/prepare-voice-assets.mjs"
+    "prebuild": "node scripts/prepare-voice-assets.mjs",
+    "publish:image": "bash scripts/publish-image.sh"
   },
   "dependencies": {
     "@ricky0123/vad-web": "^0.0.31",

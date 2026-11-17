@@ -111,11 +111,23 @@ up to 30 seconds to the configured ASR service. The VAD model and runtime are
 served by Song Cards; kiosk devices do not load these from a CDN. They are
 copied from dependencies by `predev` and `prebuild`.
 
-A small agent searches the local library first. With online discovery enabled,
-it can use yt-dlp to search YouTube. Up to three preferred channel IDs restrict
-online results to those channels; leave the list empty for unrestricted search.
+A small agent searches the local library first, ignoring spoken filler and
+tolerating minor spelling/transcription errors. Empty searches include library
+titles as context so the model can search a related topic. With online discovery
+enabled, it can use yt-dlp to search YouTube. Up to 50 preferred channel IDs guide
+discovery. The agent can use the `all` search scope when preferred results are
+missing or unsuitable; the list is not an allowlist. All preferred channels are
+considered when filtering global results, with a bounded rotating batch also
+searched directly to keep requests quick.
 Channel IDs use the `UC…` form rather than a channel display name or handle.
-The selected video is checked again when downloading. The agent gets four
+The **Song selection prompt** in System is editable. Use it to adjust related-song
+choices and channel/language preferences; **Restore default prompt** resets it.
+The default **Constrained JSON actions** response mode uses a strict JSON schema
+instead of relying on the model server's native tool-call parser. **Native tool
+calls** remains available for compatible endpoints. Arbitrary conversational
+responses are never displayed as a no-play decision; those use fixed reason codes.
+The selected video ID, channel and duration are checked again when downloading.
+The agent gets four
 model turns and at most three searches to select a returned result or explicitly
 finish without playing. It cannot choose arbitrary playback URLs or run commands.
 
@@ -305,6 +317,21 @@ token or local GHCR login is required. Forks publish under their own repository
 name and should update `APP_IMAGE` accordingly. If an existing GHCR package was
 created outside Actions, grant this repository write access under the package's
 **Manage Actions access** setting before the first workflow run.
+
+### Build and push directly from your workstation
+
+With Docker Desktop/Engine running and `docker login ghcr.io` authenticated with
+package write access, commit the changes and run:
+
+```bash
+npm run publish:image
+```
+
+This uses the local Buildx cache and pushes both `linux/amd64` and `linux/arm64`
+under `latest` and `sha-<full-commit-sha>`. `IMAGE_NAME` overrides the registry
+repository; `PLATFORMS` can select a deployment architecture. The Next.js build
+runs once on the workstation architecture; runtime dependencies are installed
+separately for each target architecture. This command does not depend on CI.
 
 ## Contributing and license
 

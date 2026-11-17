@@ -129,7 +129,7 @@ test("agent bounds model and search calls and offers only terminal tools on the 
       if (turns === 4)
         assert.deepEqual(
           tools.map((tool) => tool.function.name),
-          ["play_result", "finish_without_playing"]
+          ["finish_without_playing"]
         );
       return call("search_library", { query: "missing" });
     }
@@ -168,7 +168,7 @@ test("agent can explicitly decline and never acts on a response after cancellati
     complete: async () =>
       call("finish_without_playing", { reason: "Which song would you like?" })
   });
-  assert.deepEqual(result, { reason: "Which song would you like?" });
+  assert.deepEqual(result, { reason: "No matching song found." });
   const controller = new AbortController();
   let searches = 0;
   await assert.rejects(

@@ -6,6 +6,7 @@ import {
   findSongById,
   getPlaybackSettings,
   searchVoiceSongs,
+  voiceLibraryHints,
   touchVoiceCachedSong
 } from "@/lib/repository";
 import { waitForOwnToneSong } from "@/lib/playback";
@@ -40,8 +41,11 @@ type Job = {
 };
 declare global {
   var __songCardsVoiceJobs: Map<string, Job> | undefined;
+  var __songCardsCancelledVoiceRequests: Map<string, number> | undefined;
 }
 const jobs = (globalThis.__songCardsVoiceJobs ??= new Map<string, Job>());
+const cancelledRequests = (globalThis.__songCardsCancelledVoiceRequests ??=
+  new Map<string, number>());
 const terminal = new Set<Stage>(["complete", "declined", "error", "cancelled"]);
 
 export class VoiceBusyError extends Error {}
@@ -73,7 +77,15 @@ export function findVoiceJob(id: string) {
 
 export async function cancelVoiceJob(id: string) {
   const job = jobs.get(id);
-  if (!job || terminal.has(job.stage)) return;
+  if (!job) {
+    if (/^[a-f0-9-]{36}$/i.test(id)) {
+      cancelledRequests.set(id, Date.now());
+      while (cancelledRequests.size > 100)
+        cancelledRequests.delete(cancelledRequests.keys().next().value!);
+    }
+    return;
+  }
+  if (terminal.has(job.stage)) return;
   job.controller.abort();
   // Wait for an in-flight speaker command before allowing the next scan.
   await job.playback?.catch(() => undefined);
@@ -86,8 +98,14 @@ export async function cancelAllVoiceJobs() {
 
 export function startVoiceJob(
   audio: File,
-  currentSong?: { title: string; artist: string }
+  currentSong?: { title: string; artist: string },
+  requestId?: string
 ) {
+  for (const [id, time] of cancelledRequests)
+    if (Date.now() - time > 180000) cancelledRequests.delete(id);
+  if (requestId && cancelledRequests.has(requestId))
+    throw new Error("Request cancelled.");
+  if (requestId && jobs.has(requestId)) return jobs.get(requestId)!;
   const settings = getVoiceSettings();
   if (!settings.enabled) throw new Error("Voice requests are disabled.");
   for (const [id, job] of jobs) {
@@ -106,7 +124,7 @@ export function startVoiceJob(
   while (jobs.size >= 20) jobs.delete(jobs.keys().next().value!);
   const now = Date.now();
   const job: Job = {
-    id: crypto.randomUUID(),
+    id: requestId ?? crypto.randomUUID(),
     stage: "transcribing",
     message: "Listening to your words…",
     createdAt: now,
@@ -134,6 +152,7 @@ export function startVoiceJob(
         online: settings.onlineEnabled,
         context: { currentSong, preferredChannels: settings.preferredChannels },
         language: settings.language,
+        systemPrompt: settings.systemPrompt,
         signal,
         complete: (messages, tools, requestSignal) =>
           completeVoice(settings, messages, tools, requestSignal),
@@ -145,9 +164,11 @@ export function startVoiceJob(
             artist: song.artist,
             durationMs: song.durationMs
           })),
-        searchYoutube: (query, requestSignal) =>
-          searchVoiceYoutube(query, settings, requestSignal),
-        onSearch: () => stage(job, "searching", "Searching for your song…")
+        libraryHints: voiceLibraryHints,
+        searchYoutube: (query, requestSignal, scope) =>
+          searchVoiceYoutube(query, settings, requestSignal, scope),
+        onSearch: () => stage(job, "searching", "Searching for your song…"),
+        onDecision: () => stage(job, "deciding", "Choosing a song…")
       });
       signal.throwIfAborted();
       if ("reason" in decision) {
@@ -185,6 +206,12 @@ export function startVoiceJob(
 
 export async function playVoiceJob(id: string) {
   const job = jobs.get(id);
+  if (
+    job?.stage === "complete" &&
+    job.playback &&
+    !job.controller.signal.aborted
+  )
+    return job.playback;
   if (
     !job ||
     job.stage !== "ready" ||

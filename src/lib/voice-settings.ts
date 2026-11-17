@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getDatabase } from "@/lib/db";
+import { defaultVoicePrompt } from "@/lib/voice-prompt";
 
 const endpoint = z
   .string()
@@ -36,7 +37,14 @@ export const voiceSettingsSchema = z
           .trim()
           .regex(/^UC[\w-]{22}$/)
       )
-      .max(3),
+      .max(50),
+    systemPrompt: z
+      .string()
+      .trim()
+      .min(1)
+      .max(12000)
+      .default(defaultVoicePrompt),
+    outputMode: z.enum(["json_schema", "tools"]).default("json_schema"),
     language: z.string().trim().max(80),
     maxSongSeconds: z.number().int().min(30).max(1800),
     asrApiKey: z.string().max(2000).optional(),
@@ -80,6 +88,8 @@ const defaults: VoiceSettings = {
   llmModel: "",
   llmApiKey: "",
   preferredChannels: [],
+  systemPrompt: defaultVoicePrompt,
+  outputMode: "json_schema",
   language: "English",
   maxSongSeconds: 600
 };

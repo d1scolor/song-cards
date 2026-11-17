@@ -1,6 +1,11 @@
 import { z } from "zod";
 import type { AgentMessage, agentTools } from "@/lib/voice-agent";
 import type { VoiceSettings } from "@/lib/voice-settings";
+import {
+  decodeJsonAction,
+  jsonActionMessages,
+  structuredActionFormat
+} from "@/lib/voice-action-format";
 
 async function serviceRequest(
   url: string,
@@ -73,17 +78,25 @@ export async function completeVoice(
     settings.llmApiKey,
     JSON.stringify({
       model: settings.llmModel,
-      messages,
-      tools,
-      tool_choice: "required",
-      parallel_tool_calls: false,
+      ...(settings.outputMode === "tools"
+        ? {
+            messages,
+            tools,
+            tool_choice: "required",
+            parallel_tool_calls: false
+          }
+        : {
+            messages: jsonActionMessages(messages),
+            response_format: structuredActionFormat(tools)
+          }),
       temperature: 0.2,
       max_tokens: 768
     }),
     signal,
     true
   );
-  return z
+  const message = z
     .object({ choices: z.array(z.object({ message: z.unknown() })).min(1) })
     .parse(body).choices[0].message;
+  return settings.outputMode === "tools" ? message : decodeJsonAction(message);
 }

@@ -21,7 +21,8 @@ const maxAudioBytes = 64 * 1024 * 1024;
 
 export function parseYoutubeResults(
   body: unknown,
-  settings: Pick<VoiceSettings, "preferredChannels" | "maxSongSeconds">
+  settings: Pick<VoiceSettings, "preferredChannels" | "maxSongSeconds">,
+  scope: "preferred" | "all" = "preferred"
 ): YoutubeCandidate[] {
   const entries = (body as { entries?: unknown[] })?.entries;
   if (!Array.isArray(entries)) return [];
@@ -38,7 +39,8 @@ export function parseYoutubeResults(
       entry.duration <= 0 ||
       entry.duration > settings.maxSongSeconds ||
       entry.is_live === true ||
-      (settings.preferredChannels.length > 0 &&
+      (scope === "preferred" &&
+        settings.preferredChannels.length > 0 &&
         !settings.preferredChannels.includes(entry.channel_id))
     )
       return [];
@@ -55,51 +57,83 @@ export function parseYoutubeResults(
   });
 }
 
+export function preferredChannelBatch(
+  channels: string[],
+  query: string
+): string[] {
+  if (!channels.length) return [];
+  // All configured channels participate in global-result ranking. Rotate a
+  // small targeted batch by topic instead of permanently ignoring entries
+  // after the first three or issuing 50 requests for every spoken request.
+  const offset =
+    [...query].reduce(
+      (hash, char) => (hash * 31 + char.charCodeAt(0)) >>> 0,
+      0
+    ) % channels.length;
+  return Array.from(
+    { length: Math.min(3, channels.length) },
+    (_, index) => channels[(offset + index) % channels.length]
+  );
+}
+
 export async function searchVoiceYoutube(
   query: string,
   settings: VoiceSettings,
-  signal: AbortSignal
+  signal: AbortSignal,
+  scope: "preferred" | "all" = "preferred"
 ) {
   const binary = await voiceYouTubeBinary();
-  const sources = settings.preferredChannels.length
-    ? settings.preferredChannels
-        .slice(0, 3)
-        .map(
-          (id) =>
-            `https://www.youtube.com/channel/${id}/search?query=${encodeURIComponent(query)}`
-        )
-    : [`ytsearch8:${query}`];
-  const found: YoutubeCandidate[] = [];
-  // Sequential requests keep search bounded and avoid unnecessary YouTube load.
-  for (const source of sources) {
+  const request = async (source: string) => {
+    const result = await runCommand(
+      binary,
+      [
+        "--ignore-config",
+        "--no-cache-dir",
+        "--flat-playlist",
+        "--playlist-end",
+        "24",
+        "--dump-single-json",
+        "--socket-timeout",
+        "10",
+        "--retries",
+        "1",
+        "--",
+        source
+      ],
+      { signal, timeoutMs: 15000, maxOutputCharacters: 600000 }
+    );
+    return parseYoutubeResults(JSON.parse(result.stdout), settings, scope);
+  };
+  signal.throwIfAborted();
+  let found: YoutubeCandidate[] = [];
+  let successful = false;
+  try {
+    found = await request(`ytsearch24:${query}`);
+    successful = true;
+  } catch {
     signal.throwIfAborted();
-    try {
-      const result = await runCommand(
-        binary,
-        [
-          "--ignore-config",
-          "--no-cache-dir",
-          "--flat-playlist",
-          "--playlist-end",
-          "8",
-          "--dump-single-json",
-          "--socket-timeout",
-          "10",
-          "--retries",
-          "1",
-          "--",
-          source
-        ],
-        { signal, timeoutMs: 15_000, maxOutputCharacters: 300_000 }
-      );
-      found.push(...parseYoutubeResults(JSON.parse(result.stdout), settings));
-    } catch {
-      signal.throwIfAborted();
-      if (sources.length === 1)
-        throw new Error("YouTube search is unavailable. Please try again.");
-    }
-    if (found.length >= 8) break;
   }
+  if (
+    scope === "preferred" &&
+    settings.preferredChannels.length &&
+    found.length < 4
+  ) {
+    const targeted = await Promise.allSettled(
+      preferredChannelBatch(settings.preferredChannels, query).map((id) =>
+        request(
+          `https://www.youtube.com/channel/${id}/search?query=${encodeURIComponent(query)}`
+        )
+      )
+    );
+    for (const result of targeted)
+      if (result.status === "fulfilled") {
+        successful = true;
+        found.push(...result.value);
+      }
+  }
+  signal.throwIfAborted();
+  if (!successful)
+    throw new Error("YouTube search is unavailable. Please try again.");
   return [...new Map(found.map((item) => [item.videoId, item])).values()].slice(
     0,
     8
@@ -174,9 +208,7 @@ export async function prepareVoiceYoutube(
       !Number.isFinite(metadata.duration) ||
       metadata.duration <= 0 ||
       metadata.duration > settings.maxSongSeconds ||
-      metadata.is_live ||
-      (settings.preferredChannels.length > 0 &&
-        !settings.preferredChannels.includes(metadata.channel_id))
+      metadata.is_live
     ) {
       throw new Error("The selected video no longer matches your settings.");
     }

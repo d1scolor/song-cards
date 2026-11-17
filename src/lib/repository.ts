@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { coverDirectory, getDatabase, mediaDirectory } from "@/lib/db";
 import { config } from "@/lib/config";
+import { rankSongMatches } from "@/lib/song-search";
 import type {
   LoudnessAnalysis,
   PlaybackSettings,
@@ -235,10 +236,6 @@ export function createSongCard(
 }
 
 export function searchVoiceSongs(query: string): Song[] {
-  const words = query
-    .toLocaleLowerCase()
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter(Boolean);
   const rows = getDatabase()
     .prepare(
       `SELECT songs.* FROM songs WHERE
@@ -246,22 +243,18 @@ export function searchVoiceSongs(query: string): Song[] {
     OR EXISTS (SELECT 1 FROM voice_cache WHERE song_id = songs.id)`
     )
     .all() as SongRow[];
-  return rows
-    .map(mapSong)
-    .map((song) => ({
-      song,
-      score: words.reduce(
-        (score, word) =>
-          score +
-          (song.title.toLocaleLowerCase().includes(word) ? 3 : 0) +
-          (song.artist.toLocaleLowerCase().includes(word) ? 1 : 0),
-        0
-      )
-    }))
-    .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 8)
-    .map((item) => item.song);
+  return rankSongMatches(rows.map(mapSong), query);
+}
+
+export function voiceLibraryHints(): string[] {
+  const rows = getDatabase()
+    .prepare(
+      `SELECT title FROM songs WHERE
+    EXISTS (SELECT 1 FROM markers WHERE song_id = songs.id AND active = 1)
+    OR EXISTS (SELECT 1 FROM voice_cache WHERE song_id = songs.id) LIMIT 270`
+    )
+    .all() as { title: string }[];
+  return rows.map((row) => row.title);
 }
 
 export function findVoiceCachedSong(videoId: string): Song | null {

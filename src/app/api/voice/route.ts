@@ -50,6 +50,12 @@ export async function POST(request: NextRequest) {
       headers: { "content-type": request.headers.get("content-type") ?? "" }
     }).formData();
     const audio = form.get("audio");
+    const requestId = form.get("requestId");
+    if (requestId !== null && !z.string().uuid().safeParse(requestId).success)
+      return NextResponse.json(
+        { error: "Invalid request ID." },
+        { status: 400 }
+      );
     if (
       !(audio instanceof File) ||
       !validateVoiceWav(new Uint8Array(await audio.arrayBuffer()))
@@ -72,7 +78,8 @@ export async function POST(request: NextRequest) {
         job: publicVoiceJob(
           startVoiceJob(
             audio,
-            parsedContext?.success ? parsedContext.data : undefined
+            parsedContext?.success ? parsedContext.data : undefined,
+            typeof requestId === "string" ? requestId : undefined
           )
         )
       },

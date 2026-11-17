@@ -1,8 +1,14 @@
 .git
+.agents
+.codex
+.aws
 .next
 data
 docs
 node_modules
+coverage
+*.tsbuildinfo
+public/voice
 *.log
 .env
 .env.*

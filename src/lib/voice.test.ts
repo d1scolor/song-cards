@@ -141,24 +141,34 @@ function mockServices() {
       return Response.json({ text: "Play Pluto" });
     const request = JSON.parse(options!.body as string);
     const last = request.messages.at(-1);
-    const name = last.role === "tool" ? "play_result" : "search_library";
-    const args =
-      last.role === "tool"
-        ? { candidateId: JSON.parse(last.content).results[0].candidateId }
-        : { query: "Pluto" };
+    let results;
+    if (last.role === "tool") results = JSON.parse(last.content).results;
+    else {
+      try {
+        results = JSON.parse(last.content).tool_result?.results;
+      } catch {
+        /* initial transcription */
+      }
+    }
+    const name = results?.length ? "play_result" : "search_library";
+    const args = results?.length
+      ? { candidateId: results[0].candidateId }
+      : { query: "Pluto" };
     return Response.json({
       choices: [
         {
-          message: {
-            content: null,
-            tool_calls: [
-              {
-                id: "call-1",
-                type: "function",
-                function: { name, arguments: JSON.stringify(args) }
+          message: request.response_format
+            ? { content: JSON.stringify({ tool: name, arguments: args }) }
+            : {
+                content: null,
+                tool_calls: [
+                  {
+                    id: "call-1",
+                    type: "function",
+                    function: { name, arguments: JSON.stringify(args) }
+                  }
+                ]
               }
-            ]
-          }
         }
       ]
     });
@@ -178,7 +188,7 @@ const recording = () =>
     type: "audio/wav"
   });
 
-test("a prepared voice decision requires a separate single-use playback commit for either target", async () => {
+test("a prepared voice decision starts playback once and safely replays its commit response for either target", async () => {
   saveVoiceSettings(defaults);
   mockServices();
   createSongCard({
@@ -199,7 +209,8 @@ test("a prepared voice decision requires a separate single-use playback commit f
     assert.equal(result.playbackTarget, target);
     if (target === "local") assert.ok("localPlayback" in result);
     else assert.equal((await getPlayerStatus()).state, "play");
-    await assert.rejects(playVoiceJob(job.id));
+    const replay = await playVoiceJob(job.id);
+    assert.deepEqual(replay, result);
   }
 });
 
@@ -213,6 +224,31 @@ test("cancelled and disabled requests cannot commit playback", async () => {
   await assert.rejects(playVoiceJob(job.id));
   saveVoiceSettings({ ...defaults, enabled: false });
   assert.throws(() => startVoiceJob(recording()));
+});
+
+test("saved selection behavior supports 50 channels and structured output without losing service keys", () => {
+  const channels = Array.from(
+    { length: 50 },
+    (_, index) => "UC" + String(index).padStart(22, "0")
+  );
+  saveVoiceSettings({
+    ...defaults,
+    preferredChannels: channels,
+    systemPrompt: "Choose a related astronomy song.",
+    asrApiKey: "fixture-config-key"
+  });
+  const saved = getVoiceSettings();
+  assert.equal(saved.preferredChannels.length, 50);
+  assert.equal(saved.systemPrompt, "Choose a related astronomy song.");
+  assert.equal(saved.outputMode, "json_schema");
+  assert.equal(saved.asrApiKey, "fixture-config-key");
+});
+
+test("a request cancelled during upload cannot start later as an orphan job", async () => {
+  saveVoiceSettings(defaults);
+  const id = crypto.randomUUID();
+  await cancelVoiceJob(id);
+  assert.throws(() => startVoiceJob(recording(), undefined, id), /cancelled/);
 });
 
 test("cancelling an in-flight transcription prevents later model calls and releases the job slot", async () => {

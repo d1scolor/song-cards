@@ -17,6 +17,7 @@ import {
   useRef,
   useState
 } from "react";
+import { withDeadline } from "@/lib/async-deadline";
 
 export type LocalPlaybackTrack = {
   id: string;
@@ -46,7 +47,7 @@ type LocalPlaybackState = {
 
 type LocalPlaybackContextValue = LocalPlaybackState & {
   unlock: () => Promise<void>;
-  playTrack: (track: LocalPlaybackTrack) => Promise<void>;
+  playTrack: (track: LocalPlaybackTrack, signal?: AbortSignal) => Promise<void>;
   toggle: () => Promise<void>;
   pause: () => void;
   stop: () => void;
@@ -68,9 +69,7 @@ function effectiveVolume(
     0,
     Math.min(
       maximum,
-      Math.round(
-        masterVolume * 10 ** (totalGainDb / Math.max(1, curveDivisor))
-      )
+      Math.round(masterVolume * 10 ** (totalGainDb / Math.max(1, curveDivisor)))
     )
   );
 }
@@ -227,8 +226,16 @@ export function LocalPlaybackProvider({
       sourceRef.current = source;
       gainRef.current = gain;
     }
-    if (audioContextRef.current.state === "suspended") {
-      await audioContextRef.current.resume();
+    if (
+      audioContextRef.current.state !== "running" &&
+      audioContextRef.current.state !== "closed"
+    ) {
+      await withDeadline(
+        audioContextRef.current.resume(),
+        5000,
+        undefined,
+        "Tap play to resume audio on this device."
+      );
     }
   }, []);
 
@@ -282,7 +289,8 @@ export function LocalPlaybackProvider({
   }, [ensureAudioGraph]);
 
   const playTrack = useCallback(
-    async (track: LocalPlaybackTrack) => {
+    async (track: LocalPlaybackTrack, signal?: AbortSignal) => {
+      signal?.throwIfAborted();
       const audio = audioRef.current;
       if (!audio) return;
       trackRef.current = track;
@@ -322,15 +330,23 @@ export function LocalPlaybackProvider({
           audio.currentTime = track.startMs / 1_000;
         }
         const playback = audio.play();
-        await Promise.all([audioGraph, playback]);
+        await withDeadline(
+          Promise.all([audioGraph, playback]),
+          12000,
+          signal,
+          "The song is ready. Tap play in the player to start it."
+        );
       } catch (error) {
+        if (trackRef.current !== track) throw error;
+        audio.pause();
         setPlayer((current) => ({
           ...current,
-          state: "stop",
-          error:
-            error instanceof DOMException && error.name === "NotAllowedError"
+          state: "pause",
+          error: signal?.aborted
+            ? ""
+            : error instanceof DOMException && error.name === "NotAllowedError"
               ? "Tap play again to allow audio on this device."
-              : "Local playback could not be started."
+              : "The song is ready. Tap play to start it."
         }));
         throw error;
       }
@@ -366,7 +382,9 @@ export function LocalPlaybackProvider({
 
   const pause = useCallback(() => {
     audioRef.current?.pause();
-    setPlayer((current) => current.track ? { ...current, state: "pause" } : current);
+    setPlayer((current) =>
+      current.track ? { ...current, state: "pause" } : current
+    );
   }, []);
 
   const stop = useCallback(() => {
@@ -382,15 +400,18 @@ export function LocalPlaybackProvider({
     }));
   }, []);
 
-  const seek = useCallback((positionMs: number) => {
-    const audio = audioRef.current;
-    const track = trackRef.current;
-    if (!audio || !track) return;
-    const maximum = track.endMs ?? player.durationMs ?? track.durationMs;
-    const next = Math.max(track.startMs, Math.min(maximum, positionMs));
-    audio.currentTime = next / 1_000;
-    setPlayer((current) => ({ ...current, progressMs: next }));
-  }, [player.durationMs]);
+  const seek = useCallback(
+    (positionMs: number) => {
+      const audio = audioRef.current;
+      const track = trackRef.current;
+      if (!audio || !track) return;
+      const maximum = track.endMs ?? player.durationMs ?? track.durationMs;
+      const next = Math.max(track.startMs, Math.min(maximum, positionMs));
+      audio.currentTime = next / 1_000;
+      setPlayer((current) => ({ ...current, progressMs: next }));
+    },
+    [player.durationMs]
+  );
 
   const setMasterVolume = useCallback(
     (volume: number) => {
@@ -439,7 +460,11 @@ function formatTime(milliseconds: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-export function LocalPlayerControls({ compact = false }: { compact?: boolean }) {
+export function LocalPlayerControls({
+  compact = false
+}: {
+  compact?: boolean;
+}) {
   const player = useLocalPlayback();
   const track = player.track;
   const minimum = track?.startMs ?? 0;
@@ -450,7 +475,9 @@ export function LocalPlayerControls({ compact = false }: { compact?: boolean }) 
       : 0;
 
   return (
-    <section className={`player-panel ${compact ? "player-panel--compact" : ""}`}>
+    <section
+      className={`player-panel ${compact ? "player-panel--compact" : ""}`}
+    >
       <div className="player-heading">
         <span className="connection-dot is-online" aria-hidden="true" />
         <span>This device</span>
@@ -482,7 +509,11 @@ export function LocalPlayerControls({ compact = false }: { compact?: boolean }) 
           <span>{formatTime(player.progressMs)}</span>
           <div
             className="progress-track progress-track--seekable"
-            style={{ "--seek-progress": `${Math.max(0, Math.min(100, progress))}%` } as React.CSSProperties}
+            style={
+              {
+                "--seek-progress": `${Math.max(0, Math.min(100, progress))}%`
+              } as React.CSSProperties
+            }
           >
             <input
               aria-label="Local song position"

@@ -438,6 +438,7 @@ export function Scanner({
               localPlayer.pause();
               setStage("idle");
               const response = await fetch("/api/player/action", {
+                signal: AbortSignal.timeout(5000),
                 method: "POST",
                 headers: { "content-type": "application/json" },
                 body: JSON.stringify({ action: "pause" })
@@ -450,7 +451,8 @@ export function Scanner({
               if (body.playbackTarget === "local" && "localPlayback" in body) {
                 setPlaybackTarget("local");
                 await localPlayer.playTrack(
-                  body.localPlayback as LocalPlaybackTrack
+                  body.localPlayback as LocalPlaybackTrack,
+                  signal
                 );
               } else {
                 localPlayer.stop();

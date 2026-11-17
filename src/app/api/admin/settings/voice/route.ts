@@ -31,7 +31,10 @@ export async function PUT(request: NextRequest) {
   );
   if (!parsed.success)
     return NextResponse.json(
-      { error: "Check both service endpoints, model names, and channel IDs." },
+      {
+        error:
+          "Check service endpoints, model names, selection prompt, response format, and the list of up to 50 channel IDs."
+      },
       { status: 400 }
     );
   const settings = saveVoiceSettings(parsed.data);

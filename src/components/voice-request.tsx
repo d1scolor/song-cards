@@ -11,6 +11,8 @@ import {
 import type { MicVAD } from "@ricky0123/vad-web/dist/real-time-vad";
 import { encodeVoiceWav } from "@/lib/voice-audio";
 import type { KioskPlaybackResult } from "@/lib/kiosk-playback";
+import { releaseVoiceCapture } from "@/lib/voice-capture";
+import { withDeadline, abortableDelay } from "@/lib/async-deadline";
 
 export type VoiceRequestHandle = { cancel: () => Promise<void> };
 type Session = {
@@ -18,6 +20,8 @@ type Session = {
   jobId?: string;
   vad?: MicVAD;
   context?: AudioContext;
+  stream?: MediaStream;
+  cleanup?: Promise<void>;
   timers: number[];
   submitted: boolean;
 };
@@ -52,9 +56,7 @@ export const VoiceRequest = forwardRef<
   async function releaseMicrophone(session: Session) {
     session.timers.forEach(clearTimeout);
     session.timers = [];
-    await session.vad?.destroy().catch(() => undefined);
-    if (session.context?.state !== "closed")
-      await session.context?.close().catch(() => undefined);
+    await releaseVoiceCapture(session);
   }
 
   async function cancel() {
@@ -67,7 +69,8 @@ export const VoiceRequest = forwardRef<
       const cancelServer = session.jobId
         ? fetch(`/api/voice/${session.jobId}`, {
             method: "DELETE",
-            keepalive: true
+            keepalive: true,
+            signal: AbortSignal.timeout(5000)
           })
         : undefined;
       await releaseMicrophone(session);
@@ -111,6 +114,8 @@ export const VoiceRequest = forwardRef<
     if (active.current !== session) return;
     try {
       const form = new FormData();
+      session.jobId = crypto.randomUUID();
+      form.set("requestId", session.jobId);
       if (currentSong) form.set("currentSong", JSON.stringify(currentSong));
       form.set(
         "audio",
@@ -133,7 +138,8 @@ export const VoiceRequest = forwardRef<
       if (active.current !== session) {
         await fetch(`/api/voice/${session.jobId}`, {
           method: "DELETE",
-          keepalive: true
+          keepalive: true,
+          signal: AbortSignal.timeout(5000)
         });
         return;
       }
@@ -142,30 +148,32 @@ export const VoiceRequest = forwardRef<
       while (Date.now() < deadline && active.current === session) {
         const response = await fetch(`/api/voice/${session.jobId}`, {
           cache: "no-store",
-          signal
+          signal: AbortSignal.any([signal, AbortSignal.timeout(10000)])
         });
         const status = await response.json();
         if (!response.ok) throw new Error(status.error ?? "Please try again.");
         if (active.current !== session) return;
         callbacks.current.onMessage(status.job.message);
-        if (status.job.stage === "ready") {
+        if (["ready", "complete"].includes(status.job.stage)) {
           const playing = await fetch(`/api/voice/${session.jobId}/play`, {
             method: "POST",
-            signal
+            signal: AbortSignal.any([signal, AbortSignal.timeout(15000)])
           });
           const result = await playing.json();
           if (!playing.ok)
             throw new Error(result.error ?? "Playback could not be started.");
           if (active.current !== session) return;
-          await callbacks.current.onPlayed(result, signal);
+          await withDeadline(
+            callbacks.current.onPlayed(result, signal),
+            15000,
+            signal,
+            "The song is ready. Tap play in the player to start it."
+          );
           break;
         }
         if (["declined", "cancelled", "error"].includes(status.job.stage))
           break;
-        await new Promise<void>((resolve) => {
-          const timer = window.setTimeout(resolve, 500);
-          session.timers.push(timer);
-        });
+        await abortableDelay(500, signal);
       }
       if (active.current === session) await cancel();
     } catch (error) {
@@ -178,7 +186,7 @@ export const VoiceRequest = forwardRef<
   }
 
   async function start() {
-    if (active.current || disabled) return;
+    if (active.current || cancelling.current || disabled) return;
     const session: Session = {
       controller: new AbortController(),
       timers: [],
@@ -192,14 +200,43 @@ export const VoiceRequest = forwardRef<
       // Resume a context during the tap for browsers that require user activation.
       session.context = new AudioContext();
       const resumed = session.context.resume();
-      await callbacks.current.beforeStart();
-      await resumed;
+      const openingStream = navigator.mediaDevices
+        .getUserMedia({
+          audio: {
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        })
+        .then((stream) => {
+          if (active.current !== session) {
+            stream.getTracks().forEach((track) => track.stop());
+            throw new DOMException("Cancelled", "AbortError");
+          }
+          session.stream = stream;
+          return stream;
+        });
+      // Attach handlers immediately so a denied permission cannot become an
+      // unhandled rejection while the speaker is being paused.
+      const opening = Promise.all([
+        openingStream,
+        resumed,
+        callbacks.current.beforeStart()
+      ]);
+      const [stream] = await withDeadline(
+        opening,
+        10000,
+        session.controller.signal,
+        "Microphone setup timed out."
+      );
       const { MicVAD } = await import("@ricky0123/vad-web/dist/real-time-vad");
       if (active.current !== session) return;
       let heardSpeech = false;
       const vad = await MicVAD.new({
         model: "v5",
         startOnLoad: false,
+        getStream: async () => stream,
         audioContext: session.context,
         baseAssetPath: "/voice/",
         onnxWASMBasePath: "/voice/",
@@ -222,7 +259,12 @@ export const VoiceRequest = forwardRef<
         await releaseMicrophone(session);
         return;
       }
-      await vad.start();
+      await withDeadline(
+        vad.start(),
+        10000,
+        session.controller.signal,
+        "Microphone setup timed out."
+      );
       if (active.current !== session) {
         await releaseMicrophone(session);
         return;
@@ -241,8 +283,11 @@ export const VoiceRequest = forwardRef<
       session.timers.push(
         window.setTimeout(() => {
           if (heardSpeech)
-            void vad
-              .pause()
+            void withDeadline(vad.pause(), 2000)
+              .then(() => {
+                if (!session.submitted)
+                  void fail(session, "Please try a shorter request.");
+              })
               .catch(() => fail(session, "Please try a shorter request."));
           else void fail(session, "I didn't hear a request. Please try again.");
         }, 30_000)
@@ -252,7 +297,9 @@ export const VoiceRequest = forwardRef<
         session,
         error instanceof DOMException && error.name === "NotAllowedError"
           ? "Microphone access was blocked. Allow the microphone and try again."
-          : "The microphone couldn't be opened. Please try again."
+          : error instanceof DOMException && error.name === "NotReadableError"
+            ? "The microphone is busy. Close other apps using it and try again."
+            : "Voice setup failed. Tap the microphone to retry."
       );
     }
   }

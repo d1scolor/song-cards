@@ -3,6 +3,7 @@
 import { Mic } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { PublicVoiceSettings } from "@/lib/voice-settings";
+import { defaultVoicePrompt } from "@/lib/voice-prompt";
 
 export function VoiceSettingsPanel() {
   const [settings, setSettings] = useState<PublicVoiceSettings | null>(null);
@@ -234,7 +235,7 @@ export function VoiceSettingsPanel() {
               </span>
             </label>
             <label>
-              Preferred YouTube channel IDs (up to three)
+              Preferred YouTube channel IDs (up to 50)
               <textarea
                 value={channels}
                 rows={3}
@@ -243,9 +244,54 @@ export function VoiceSettingsPanel() {
               />
             </label>
             <small>
-              When channels are supplied, online results are restricted to those
-              channels.
+              These channels are preferred. The agent can search all YouTube if
+              it cannot find a suitable song here. Searches use a bounded batch
+              of channels to keep requests quick.
             </small>
+            <label>
+              Model response format
+              <select
+                value={settings.outputMode}
+                onChange={(event) =>
+                  setSettings({
+                    ...settings,
+                    outputMode: event.target.value as "json_schema" | "tools"
+                  })
+                }
+              >
+                <option value="json_schema">
+                  Constrained JSON actions (recommended)
+                </option>
+                <option value="tools">Native tool calls (compatibility)</option>
+              </select>
+            </label>
+            <label>
+              Song selection prompt
+              <textarea
+                className="voice-prompt"
+                aria-label="Song selection prompt"
+                rows={12}
+                value={settings.systemPrompt}
+                maxLength={12000}
+                onChange={(event) =>
+                  setSettings({ ...settings, systemPrompt: event.target.value })
+                }
+              />
+            </label>
+            <small>
+              Adjust topic matching, related-song choices, language, and channel
+              preferences here. Tool argument validation, returned candidate
+              IDs, timeouts, and online enablement are enforced by the app.
+            </small>
+            <button
+              type="button"
+              className="secondary-button voice-prompt-reset"
+              onClick={() =>
+                setSettings({ ...settings, systemPrompt: defaultVoicePrompt })
+              }
+            >
+              Restore default prompt
+            </button>
             <label>
               Maximum online song length (seconds)
               <input
@@ -271,7 +317,7 @@ export function VoiceSettingsPanel() {
               to this page. Include that database in your private backups.
             </p>
             <button
-              className="secondary-button"
+              className="secondary-button voice-save-button"
               type="submit"
               disabled={saving}
             >

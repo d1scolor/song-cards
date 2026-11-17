@@ -1013,11 +1013,21 @@ h2,
 .voice-service-fields legend { margin-bottom: 14px; font-weight: 800; }
 .voice-settings label { display: block; margin: 14px 0; }
 .voice-settings .toggle-field { display: flex; }
-.voice-settings input:not([type="checkbox"]), .voice-settings textarea {
+.voice-settings input:not([type="checkbox"]), .voice-settings textarea, .voice-settings select {
   display: block; width: 100%; box-sizing: border-box; margin-top: 7px;
   padding: 12px; border: 1px solid #ddd2c2; border-radius: 12px; background: #fff;
   color: var(--ink); font: inherit;
 }
+.voice-settings button {
+  appearance: none; -webkit-appearance: none; min-height: 52px;
+  padding: 14px 20px; color: #332c23; -webkit-text-fill-color: #332c23;
+  background: #fff; border: 1px solid #dcd2c1; font: inherit; font-weight: 800;
+  white-space: normal; line-height: 1.4; text-align: center;
+}
+.voice-settings .voice-save-button { display: flex; width: 100%; margin-top: 18px; }
+.voice-settings button:disabled { opacity: .65; }
+.voice-settings .voice-prompt { font-family: ui-monospace, monospace; font-size: .9rem; line-height: 1.5; }
+.voice-settings .voice-prompt-reset { margin: 12px 0; }
 .voice-settings small { color: var(--muted); line-height: 1.5; }
 .voice-settings .voice-key-clear { display: flex; align-items: center; gap: 8px; font-size: .85rem; }
 .voice-key-clear input { width: 18px; height: 18px; }

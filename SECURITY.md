@@ -30,9 +30,10 @@ credentials. Voice endpoints share the trusted-LAN kiosk boundary and require
 same-origin mutation requests. Recordings are size- and duration-limited, and
 only one voice job runs at once. Job identifiers are random capability tokens.
 The agent can only select candidates from bounded searches; it cannot supply
-arbitrary URLs to the downloader or call administrative tools. Preferred
-channels restrict discovery but do not guarantee that their content is suitable
-for every child. Only enable online discovery for sources you trust.
+arbitrary URLs to the downloader or call administrative tools. The editable
+prompt controls selection preferences; validated actions and resource limits
+remain enforced by code. Preferred channels guide discovery and allow broader
+fallback; they are not a content allowlist or an age-suitability guarantee.
 
 ## Reporting a vulnerability
 
