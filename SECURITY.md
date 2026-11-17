@@ -39,7 +39,10 @@ fallback; they are not a content allowlist or an age-suitability guarantee.
 Voice diagnostics retain a bounded in-memory history for administrators and emit
 the same events to container logs. Events include phases, durations, fixed error
 codes, HTTP statuses, and selected YouTube video IDs; they exclude recordings,
-transcripts, prompts, credentials, and signed media URLs. The same-origin capture
+transcripts, prompts, credentials, and signed media URLs. ASR transcripts are
+retained separately only in the bounded admin history and its copy/export text,
+cleared on restart or eviction, never in container logs or public job responses.
+The same-origin capture
 diagnostic endpoint accepts only bounded, validated fields, never free-form error
 text. Container log retention is controlled by the deployment.
 

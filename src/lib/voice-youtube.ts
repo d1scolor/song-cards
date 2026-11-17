@@ -191,7 +191,6 @@ export async function prepareVoiceYoutube(
         "m4a",
         "--audio-quality",
         "192K",
-        "--write-info-json",
         "--output",
         path.join(directory, "audio.%(ext)s"),
         "--",
@@ -204,37 +203,10 @@ export async function prepareVoiceYoutube(
       }
     );
     signal.throwIfAborted();
-    let metadata;
-    try {
-      metadata = JSON.parse(
-        await fs.readFile(path.join(directory, "audio.info.json"), "utf8")
-      );
-    } catch (error) {
-      throw new VoiceOperationError(
-        (error as NodeJS.ErrnoException).code === "ENOENT"
-          ? "no_downloaded_audio"
-          : "invalid_response"
-      );
-    }
-    if (
-      metadata.id !== candidate.videoId ||
-      metadata.channel_id !== candidate.channelId ||
-      !Number.isFinite(metadata.duration) ||
-      metadata.duration <= 0 ||
-      metadata.duration > settings.maxSongSeconds ||
-      metadata.is_live
-    ) {
-      throw new VoiceOperationError("video_changed");
-    }
+    // Search metadata guides selection; it is not a reason to discard usable
+    // downloaded audio. Download filters bound resources, and storeAudioFile
+    // probes the actual audio rather than trusting a JSON sidecar.
     const audio = path.join(directory, "audio.m4a");
-    let audioSize: number;
-    try {
-      audioSize = (await fs.stat(audio)).size;
-    } catch {
-      throw new VoiceOperationError("no_downloaded_audio");
-    }
-    if (audioSize > maxAudioBytes)
-      throw new VoiceOperationError("no_downloaded_audio");
     onProgress?.("audio_processing");
     try {
       stored = await storeAudioFile(audio, "audio.m4a", signal);

@@ -27,6 +27,9 @@ export function VoiceDiagnostics() {
     .map(
       (record) =>
         `Request ${record.request} · ${new Date(record.startedAt).toLocaleString()}\n` +
+        (record.transcript !== undefined
+          ? `ASR transcript: ${JSON.stringify(record.transcript)}\n`
+          : "") +
         record.events
           .map((entry) => {
             const { at, phase, event, ...details } = entry;
@@ -41,8 +44,9 @@ export function VoiceDiagnostics() {
       <p className="system-message">
         Shows the last 20 requests for this running server, including capture,
         ASR, selection, YouTube download, audio processing, and speaker
-        indexing. Recordings, transcripts, API keys, and signed URLs are not
-        logged.
+        indexing. ASR transcripts are included here and in copied diagnostics,
+        kept only in server memory until restart or history pruning.
+        Recordings, API keys, and signed download URLs are not retained here.
       </p>
       <div className="voice-diagnostic-actions">
         <button
@@ -78,8 +82,8 @@ export function VoiceDiagnostics() {
       )}
       {message && <p role="status">{message}</p>}
       <p className="system-message">
-        The same redacted events appear in Portainer’s container Logs view,
-        prefixed with [voice].
+        Stage events also appear in Portainer’s container Logs view, prefixed
+        with [voice]. Transcripts appear only in this protected admin history.
       </p>
     </section>
   );

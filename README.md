@@ -133,7 +133,9 @@ The default **Constrained JSON actions** response mode uses a strict JSON schema
 instead of relying on the model server's native tool-call parser. **Native tool
 calls** remains available for compatible endpoints. Arbitrary conversational
 responses are never displayed as a no-play decision; those use fixed reason codes.
-The selected video ID, channel and duration are checked again when downloading.
+Download limits apply in yt-dlp. After download, usable audio proceeds to playback
+without rejecting differences between search and download metadata or repeating
+the voice download's size check.
 The agent gets four
 model turns and at most three searches to select a returned result or explicitly
 finish without playing. It can only choose IDs supplied in its library snapshot
@@ -157,7 +159,9 @@ If the agent declines to play a song, playback resumes only when the same song
 was playing before recording and is still paused. Previously paused songs stay
 paused. Pausing an idle OwnTone speaker is a no-op, and a speaker pause failure
 does not block microphone capture.
-Recordings and transcripts are not retained by Song Cards. The configured
+Recordings are not retained by Song Cards. ASR transcripts are kept only in the
+bounded in-memory admin activity history (last 20 requests, cleared on restart),
+not in container logs or ordinary kiosk job responses. The configured
 ASR and LLM services receive them and control their own retention. Job status
 contains stage timings for diagnosing delays, and expires when the app restarts
 or the bounded in-memory job history is pruned.
@@ -174,8 +178,10 @@ The same server events appear with a `[voice]` prefix in **Portainer → Contain
 → your Song Cards container → Logs**, or with
 `docker logs --since=10m --tail=200 <container-id>`. Docker Compose is not needed.
 Older images do not emit these diagnostics, so an empty container log does not
-mean that no requests reached the app. Recordings, transcripts, prompts, API keys,
-and signed download URLs are excluded from these diagnostic records.
+mean that no requests reached the app. The admin history and copied diagnostics
+include the ASR transcript so you can assess recognition accuracy; container
+logs exclude it. Recordings, prompts, API keys, and signed download URLs are not
+included in stage events.
 
 ## Local development
 

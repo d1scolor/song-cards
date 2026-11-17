@@ -371,6 +371,13 @@ test("service failures preserve their failing stage and status without recording
     )!;
     assert.equal(diagnostic.events.at(-1)?.event, "failed");
     assert.equal(diagnostic.events.at(-1)?.phase, phase);
-    assert.equal(JSON.stringify(diagnostic).includes("private fixture"), false);
+    assert.equal(
+      JSON.stringify(diagnostic.events).includes("private fixture"), false
+    );
+    assert.equal(
+      diagnostic.transcript,
+      phase === "selection" ? "private fixture transcript" : undefined
+    );
+    assert.equal("transcript" in publicVoiceJob(result), false);
   }
 });

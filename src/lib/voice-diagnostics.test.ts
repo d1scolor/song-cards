@@ -4,6 +4,7 @@ import { CommandError } from "@/lib/command";
 import {
   voiceFailure,
   recordVoiceDiagnostic,
+  recordVoiceTranscript,
   recentVoiceDiagnostics
 } from "@/lib/voice-diagnostics";
 import {
@@ -53,6 +54,23 @@ test("voice failures classify media errors without retaining raw output or signe
   } finally {
     console.info = original;
   }
+});
+
+test("dictated text is bounded in admin history and excluded from container events", () => {
+  const id = crypto.randomUUID();
+  const lines: unknown[][] = [];
+  const original = console.info;
+  console.info = (...args) => { lines.push(args); };
+  try {
+    recordVoiceDiagnostic(id, "transcription", "start");
+    recordVoiceTranscript(id, "dictated fixture words" + "x".repeat(3000));
+    recordVoiceDiagnostic(id, "transcription", "complete");
+    const record = recentVoiceDiagnostics().find(record => record.request === id.slice(0, 8))!;
+    assert.equal(record.transcript?.length, 2000);
+    assert.ok(record.transcript?.startsWith("dictated fixture words"));
+    assert.equal(JSON.stringify(lines).includes("dictated fixture words"), false);
+    assert.equal(JSON.stringify(record.events).includes("dictated fixture words"), false);
+  } finally { console.info = original; }
 });
 
 test("capture failures keep phase and native error names while removing secrets from console text", () => {

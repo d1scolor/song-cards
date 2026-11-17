@@ -48,6 +48,7 @@ export type VoiceDiagnosticEvent = VoiceDiagnosticDetails & {
 export type VoiceDiagnosticRecord = {
   request: string;
   startedAt: string;
+  transcript?: string;
   events: VoiceDiagnosticEvent[];
 };
 declare global {
@@ -152,6 +153,13 @@ export function recordVoiceDiagnostic(
 
 export function recentVoiceDiagnostics() {
   return [...records.values()].reverse();
+}
+
+export function recordVoiceTranscript(id: string, transcript: string) {
+  // The protected admin history may include dictated text. Keep it separate
+  // from events, which are also emitted to container stdout.
+  const record = records.get(id);
+  if (record) record.transcript = transcript.slice(0, 2000);
 }
 
 export function voiceFailure(

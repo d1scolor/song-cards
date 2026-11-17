@@ -18,6 +18,7 @@ import {
 import type { Song } from "@/lib/types";
 import {
   recordVoiceDiagnostic,
+  recordVoiceTranscript,
   voiceFailure,
   type VoiceDiagnosticPhase,
   type VoiceDiagnosticDetails
@@ -179,8 +180,9 @@ export function startVoiceJob(
     try {
       begin("transcription");
       const transcript = await transcribeVoice(audio, settings, signal);
-      complete();
       signal.throwIfAborted();
+      recordVoiceTranscript(job.id, transcript);
+      complete();
       if (!transcript) {
         recordVoiceDiagnostic(job.id, "transcription", "declined");
         stage(job, "declined", "I didn't hear a request. Please try again.");
