@@ -4,6 +4,7 @@ import { Mic } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { PublicVoiceSettings } from "@/lib/voice-settings";
 import { defaultVoicePrompt } from "@/lib/voice-prompt";
+import { VoiceDiagnostics } from "@/components/voice-diagnostics";
 
 export function VoiceSettingsPanel() {
   const [settings, setSettings] = useState<PublicVoiceSettings | null>(null);
@@ -333,6 +334,7 @@ export function VoiceSettingsPanel() {
           {message}
         </p>
       )}
+      <VoiceDiagnostics />
     </section>
   );
 }

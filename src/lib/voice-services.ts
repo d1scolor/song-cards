@@ -6,6 +6,7 @@ import {
   jsonActionMessages,
   structuredActionFormat
 } from "@/lib/voice-action-format";
+import { VoiceOperationError } from "@/lib/voice-errors";
 
 async function serviceRequest(
   url: string,
@@ -27,9 +28,9 @@ async function serviceRequest(
   });
   // Service error bodies can contain credentials or installation details.
   if (!response.ok)
-    throw new Error(`The voice service returned HTTP ${response.status}.`);
+    throw new VoiceOperationError("service_http_error", response.status);
   const reader = response.body?.getReader();
-  if (!reader) throw new Error("The voice service returned no response.");
+  if (!reader) throw new VoiceOperationError("invalid_response");
   const chunks: Uint8Array[] = [];
   let length = 0;
   try {
@@ -39,7 +40,7 @@ async function serviceRequest(
       length += value.byteLength;
       if (length > 200_000) {
         await reader.cancel();
-        throw new Error("The voice service response was too large.");
+        throw new VoiceOperationError("invalid_response");
       }
       chunks.push(value);
     }

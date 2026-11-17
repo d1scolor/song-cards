@@ -301,4 +301,66 @@ test("voice configuration requires administrator authentication and redacts save
   assert.equal(body.settings.asrKeyConfigured, true);
   assert.equal(JSON.stringify(body).includes("fixture-http-secret"), false);
   assert.equal("asrApiKey" in body.settings, false);
+  const { GET: diagnostics } =
+    await import("@/app/api/admin/voice/diagnostics/route");
+  assert.equal(diagnostics(new NextRequest(url)).status, 401);
+  const activity = await diagnostics(
+    new NextRequest(url, { headers: { cookie } })
+  ).json();
+  assert.ok(activity.requests.length > 0);
+  assert.equal(JSON.stringify(activity).includes("fixture-http-secret"), false);
+});
+
+test("capture diagnostics reject free-form text and accept only redacted fields", async () => {
+  saveVoiceSettings(defaults);
+  const { NextRequest } = await import("next/server");
+  const { POST } = await import("@/app/api/voice/capture-diagnostics/route");
+  const input = {
+    requestId: crypto.randomUUID(),
+    event: "failed",
+    capturePhase: "vad_loading",
+    code: "vad_loading_failed",
+    errorName: "Error"
+  };
+  const request = (body: unknown) =>
+    new NextRequest("http://localhost:3000/api/voice/capture-diagnostics", {
+      method: "POST",
+      headers: {
+        host: "localhost:3000",
+        origin: "http://localhost:3000",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify(body)
+    });
+  assert.equal(
+    (await POST(request({ ...input, message: "fixture-not-for-logs" }))).status,
+    400
+  );
+  assert.equal((await POST(request(input))).status, 204);
+});
+
+test("service failures preserve their failing stage and status without recording response bodies", async () => {
+  saveVoiceSettings(defaults);
+  const { recentVoiceDiagnostics } = await import("@/lib/voice-diagnostics");
+  const { publicVoiceJob } = await import("@/lib/voice-jobs");
+  for (const phase of ["transcription", "selection"] as const) {
+    globalThis.fetch = async (url) =>
+      phase === "selection" && String(url).includes("asr.test")
+        ? Response.json({ text: "private fixture transcript" })
+        : new Response("private fixture service response", { status: 503 });
+    const job = startVoiceJob(recording());
+    const result = await settled(job.id);
+    assert.equal(result.stage, "error");
+    assert.deepEqual(publicVoiceJob(result).failure, {
+      phase,
+      code: "service_http_error",
+      httpStatus: 503
+    });
+    const diagnostic = recentVoiceDiagnostics().find(
+      (record) => record.request === job.id.slice(0, 8)
+    )!;
+    assert.equal(diagnostic.events.at(-1)?.event, "failed");
+    assert.equal(diagnostic.events.at(-1)?.phase, phase);
+    assert.equal(JSON.stringify(diagnostic).includes("private fixture"), false);
+  }
 });

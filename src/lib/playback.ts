@@ -1,4 +1,5 @@
 import path from "node:path";
+import { VoiceOperationError } from "@/lib/voice-errors";
 import { config } from "@/lib/config";
 import { effectiveVolume, songCompensation } from "@/lib/loudness";
 import {
@@ -140,7 +141,11 @@ async function ownToneRequest(
     signal: AbortSignal.timeout(5_000)
   });
   if (!response.ok) {
-    throw new Error(`OwnTone returned ${response.status} for ${pathname}.`);
+    throw new VoiceOperationError(
+      "speaker_http_error",
+      response.status,
+      `OwnTone returned ${response.status} for ${pathname.split("?")[0]}.`
+    );
   }
   if (allowEmpty || response.status === 204) return null;
   return response.json();
@@ -437,14 +442,17 @@ export async function waitForOwnToneSong(song: Song, signal: AbortSignal) {
   if (config.playbackBackend !== "owntone") return;
   await triggerOwnToneScan();
   const deadline = Date.now() + 30_000;
+  let lastError: unknown;
   while (Date.now() < deadline) {
     signal.throwIfAborted();
     try {
       await findOwnToneTrackUri(song.filename);
       return;
-    } catch {
+    } catch (error) {
+      lastError = error;
       await new Promise<void>((resolve) => setTimeout(resolve, 500));
     }
   }
-  throw new Error("The speaker has not indexed this song yet. Please try again.");
+  if (lastError instanceof VoiceOperationError) throw lastError;
+  throw new VoiceOperationError("speaker_index_timeout");
 }

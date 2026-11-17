@@ -13,6 +13,13 @@ import { encodeVoiceWav } from "@/lib/voice-audio";
 import type { KioskPlaybackResult } from "@/lib/kiosk-playback";
 import { releaseVoiceCapture } from "@/lib/voice-capture";
 import { withDeadline, abortableDelay } from "@/lib/async-deadline";
+import {
+  captureErrorCode,
+  captureErrorName,
+  compatibleCaptureContext,
+  safeCaptureErrorMessage,
+  type CapturePhase
+} from "@/lib/voice-capture-diagnostics";
 
 export type VoiceRequestHandle = { cancel: () => Promise<void> };
 type Session = {
@@ -56,6 +63,62 @@ export const VoiceRequest = forwardRef<
   const [phase, setPhase] = useState<
     "idle" | "opening" | "listening" | "working"
   >("idle");
+
+  function captureDiagnostic(
+    session: Session,
+    capturePhase: CapturePhase,
+    event: "start" | "complete" | "failed",
+    error?: unknown
+  ) {
+    const knownNames = [
+      "Error",
+      "TypeError",
+      "NotAllowedError",
+      "NotReadableError",
+      "NotFoundError",
+      "SecurityError",
+      "NotSupportedError",
+      "InvalidStateError",
+      "AbortError",
+      "TimeoutError",
+      "OperationError"
+    ];
+    const name = captureErrorName(error);
+    const payload = {
+      requestId: session.jobId,
+      event,
+      capturePhase,
+      ...(error
+        ? {
+            code: captureErrorCode(capturePhase, error),
+            errorName: knownNames.includes(name) ? name : "Error"
+          }
+        : {}),
+      ...(session.context
+        ? { contextSampleRate: session.context.sampleRate }
+        : {}),
+      ...(session.stream?.getAudioTracks()[0]?.getSettings().sampleRate
+        ? {
+            microphoneSampleRate: session.stream
+              .getAudioTracks()[0]
+              .getSettings().sampleRate
+          }
+        : {})
+    };
+    if (error)
+      console.error(
+        "[voice.capture]",
+        { ...payload, requestId: session.jobId?.slice(0, 8) },
+        safeCaptureErrorMessage(error)
+      );
+    void fetch("/api/voice/capture-diagnostics", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+      keepalive: true,
+      signal: AbortSignal.timeout(3000)
+    }).catch(() => undefined);
+  }
   useEffect(() => {
     callbacks.current = { beforeStart, onNoPlay, onBusy, onMessage, onPlayed };
   });
@@ -121,7 +184,7 @@ export const VoiceRequest = forwardRef<
     if (active.current !== session) return;
     try {
       const form = new FormData();
-      session.jobId = crypto.randomUUID();
+      session.jobId ??= crypto.randomUUID();
       form.set("requestId", session.jobId);
       if (currentSong) form.set("currentSong", JSON.stringify(currentSong));
       form.set(
@@ -207,6 +270,7 @@ export const VoiceRequest = forwardRef<
     if (active.current || cancelling.current || disabled) return;
     const session: Session = {
       controller: new AbortController(),
+      jobId: crypto.randomUUID(),
       timers: [],
       submitted: false
     };
@@ -214,10 +278,28 @@ export const VoiceRequest = forwardRef<
     setPhase("opening");
     callbacks.current.onBusy(true);
     callbacks.current.onMessage("Opening the microphone…");
+    let capturePhase: CapturePhase = "microphone";
+    let failedPhase: CapturePhase | undefined;
+    const step = async <T,>(
+      name: CapturePhase,
+      work: Promise<T>,
+      timeout: number
+    ) => {
+      capturePhase = name;
+      try {
+        return await withDeadline(work, timeout, session.controller.signal);
+      } catch (error) {
+        failedPhase = name;
+        throw error;
+      }
+    };
     try {
       // Resume a context during the tap for browsers that require user activation.
+      capturePhase = "audio_context";
       session.context = new AudioContext();
       const resumed = session.context.resume();
+      capturePhase = "microphone";
+      captureDiagnostic(session, "microphone", "start");
       const openingStream = navigator.mediaDevices
         .getUserMedia({
           audio: {
@@ -238,56 +320,79 @@ export const VoiceRequest = forwardRef<
       // Attach handlers immediately so a denied permission cannot become an
       // unhandled rejection while the speaker is being paused.
       const opening = Promise.all([
-        openingStream,
-        resumed,
+        step("microphone", openingStream, 30000),
+        step("audio_context", resumed, 10000),
         callbacks.current.beforeStart(session.controller.signal)
       ]);
       const [stream] = await withDeadline(
         opening,
-        10000,
+        30000,
         session.controller.signal,
         "Microphone setup timed out."
       );
-      const { MicVAD } = await import("@ricky0123/vad-web/dist/real-time-vad");
+      session.context = await step(
+        "audio_context",
+        compatibleCaptureContext(stream, session.context).then(async (context) => {
+          if (active.current !== session) {
+            await context.close().catch(() => undefined);
+            throw new DOMException("Cancelled", "AbortError");
+          }
+          session.context = context;
+          return context;
+        }),
+        10000
+      );
+      const { MicVAD } = await step(
+        "vad_loading",
+        import("@ricky0123/vad-web/dist/real-time-vad"),
+        15000
+      );
       if (active.current !== session) return;
       let heardSpeech = false;
-      const vad = await MicVAD.new({
-        model: "v5",
-        startOnLoad: false,
-        getStream: async () => stream,
-        audioContext: session.context,
-        baseAssetPath: "/voice/",
-        onnxWASMBasePath: "/voice/",
-        redemptionMs: 1400,
-        minSpeechMs: 400,
-        preSpeechPadMs: 500,
-        submitUserSpeechOnPause: true,
-        ortConfig: (ort) => {
-          ort.env.wasm.numThreads = 1;
-        },
-        onSpeechRealStart: () => {
-          heardSpeech = true;
-        },
-        onSpeechEnd: (samples) => {
-          void submit(session, samples);
-        }
-      });
+      const vad = await step(
+        "vad_loading",
+        MicVAD.new({
+          model: "v5",
+          startOnLoad: false,
+          getStream: async () => stream,
+          audioContext: session.context,
+          baseAssetPath: "/voice/",
+          onnxWASMBasePath: "/voice/",
+          redemptionMs: 1400,
+          minSpeechMs: 400,
+          preSpeechPadMs: 500,
+          submitUserSpeechOnPause: true,
+          ortConfig: (ort) => {
+            ort.env.wasm.numThreads = 1;
+          },
+          onSpeechRealStart: () => {
+            heardSpeech = true;
+          },
+          onSpeechEnd: (samples) => {
+            void submit(session, samples);
+          }
+        }).then(async (instance) => {
+          if (active.current !== session) {
+            await instance.destroy().catch(() => undefined);
+            throw new DOMException("Cancelled", "AbortError");
+          }
+          session.vad = instance;
+          return instance;
+        }),
+        15000
+      );
       session.vad = vad;
       if (active.current !== session) {
         await releaseMicrophone(session);
         return;
       }
-      await withDeadline(
-        vad.start(),
-        10000,
-        session.controller.signal,
-        "Microphone setup timed out."
-      );
+      await step("vad_start", vad.start(), 10000);
       if (active.current !== session) {
         await releaseMicrophone(session);
         return;
       }
       setPhase("listening");
+      captureDiagnostic(session, "vad_start", "complete");
       callbacks.current.onMessage("Tell me which song you'd like.");
       session.timers.push(
         window.setTimeout(() => {
@@ -311,13 +416,21 @@ export const VoiceRequest = forwardRef<
         }, 30_000)
       );
     } catch (error) {
+      if (active.current !== session) return;
+      capturePhase = failedPhase ?? capturePhase;
+      captureDiagnostic(session, capturePhase, "failed", error);
+      const code = captureErrorCode(capturePhase, error);
       await fail(
         session,
-        error instanceof DOMException && error.name === "NotAllowedError"
+        code === "microphone_permission_denied"
           ? "Microphone access was blocked. Allow the microphone and try again."
-          : error instanceof DOMException && error.name === "NotReadableError"
+          : code === "microphone_busy"
             ? "The microphone is busy. Close other apps using it and try again."
-            : "Voice setup failed. Tap the microphone to retry."
+            : capturePhase === "vad_loading"
+              ? "Voice detection couldn't load. See System → Recent voice activity."
+              : capturePhase === "microphone"
+                ? "The microphone couldn't open. See System → Recent voice activity."
+                : "Voice audio setup failed. See System → Recent voice activity."
       );
     }
   }

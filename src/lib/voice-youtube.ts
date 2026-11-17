@@ -14,6 +14,8 @@ import {
 import { voiceYouTubeBinary } from "@/lib/ytdlp";
 import type { VoiceSettings } from "@/lib/voice-settings";
 import type { VoiceCandidate } from "@/lib/voice-agent";
+import { VoiceOperationError } from "@/lib/voice-errors";
+import { voiceFailure } from "@/lib/voice-diagnostics";
 
 type YoutubeCandidate = Extract<VoiceCandidate, { source: "youtube" }>;
 const videoPattern = /^[\w-]{11}$/;
@@ -107,10 +109,12 @@ export async function searchVoiceYoutube(
   signal.throwIfAborted();
   let found: YoutubeCandidate[] = [];
   let successful = false;
+  let lastError: unknown;
   try {
     found = await request(`ytsearch24:${query}`);
     successful = true;
-  } catch {
+  } catch (error) {
+    lastError = error;
     signal.throwIfAborted();
   }
   if (
@@ -129,11 +133,10 @@ export async function searchVoiceYoutube(
       if (result.status === "fulfilled") {
         successful = true;
         found.push(...result.value);
-      }
+      } else lastError = result.reason;
   }
   signal.throwIfAborted();
-  if (!successful)
-    throw new Error("YouTube search is unavailable. Please try again.");
+  if (!successful) throw voiceFailure(lastError, "youtube_search_failed");
   return [...new Map(found.map((item) => [item.videoId, item])).values()].slice(
     0,
     8
@@ -143,7 +146,8 @@ export async function searchVoiceYoutube(
 export async function prepareVoiceYoutube(
   candidate: YoutubeCandidate,
   settings: VoiceSettings,
-  signal: AbortSignal
+  signal: AbortSignal,
+  onProgress?: (phase: "download" | "audio_processing") => void
 ) {
   const cached = findVoiceCachedSong(candidate.videoId);
   if (cached) return cached;
@@ -156,6 +160,7 @@ export async function prepareVoiceYoutube(
   let stored: Awaited<ReturnType<typeof storeAudioFile>> | undefined;
   let songId: string | undefined;
   try {
+    onProgress?.("download");
     await runCommand(
       binary,
       [
@@ -199,9 +204,18 @@ export async function prepareVoiceYoutube(
       }
     );
     signal.throwIfAborted();
-    const metadata = JSON.parse(
-      await fs.readFile(path.join(directory, "audio.info.json"), "utf8")
-    );
+    let metadata;
+    try {
+      metadata = JSON.parse(
+        await fs.readFile(path.join(directory, "audio.info.json"), "utf8")
+      );
+    } catch (error) {
+      throw new VoiceOperationError(
+        (error as NodeJS.ErrnoException).code === "ENOENT"
+          ? "no_downloaded_audio"
+          : "invalid_response"
+      );
+    }
     if (
       metadata.id !== candidate.videoId ||
       metadata.channel_id !== candidate.channelId ||
@@ -210,12 +224,24 @@ export async function prepareVoiceYoutube(
       metadata.duration > settings.maxSongSeconds ||
       metadata.is_live
     ) {
-      throw new Error("The selected video no longer matches your settings.");
+      throw new VoiceOperationError("video_changed");
     }
     const audio = path.join(directory, "audio.m4a");
-    if ((await fs.stat(audio)).size > maxAudioBytes)
-      throw new Error("The selected song is too large.");
-    stored = await storeAudioFile(audio, "audio.m4a", signal);
+    let audioSize: number;
+    try {
+      audioSize = (await fs.stat(audio)).size;
+    } catch {
+      throw new VoiceOperationError("no_downloaded_audio");
+    }
+    if (audioSize > maxAudioBytes)
+      throw new VoiceOperationError("no_downloaded_audio");
+    onProgress?.("audio_processing");
+    try {
+      stored = await storeAudioFile(audio, "audio.m4a", signal);
+    } catch {
+      signal.throwIfAborted();
+      throw new VoiceOperationError("audio_processing_failed");
+    }
     signal.throwIfAborted();
     const song = createSong({
       title: candidate.title,
@@ -235,12 +261,7 @@ export async function prepareVoiceYoutube(
         .catch(() => undefined);
     signal.throwIfAborted();
     // Raw downloader output can contain temporary signed URLs.
-    throw new Error(
-      error instanceof Error &&
-        error.message === "The selected video no longer matches your settings."
-        ? error.message
-        : "That song couldn't be prepared. Please try another request."
-    );
+    throw voiceFailure(error, "download_failed");
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }

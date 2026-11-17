@@ -35,6 +35,13 @@ prompt controls selection preferences; validated actions and resource limits
 remain enforced by code. Preferred channels guide discovery and allow broader
 fallback; they are not a content allowlist or an age-suitability guarantee.
 
+Voice diagnostics retain a bounded in-memory history for administrators and emit
+the same events to container logs. Events include phases, durations, fixed error
+codes, HTTP statuses, and selected YouTube video IDs; they exclude recordings,
+transcripts, prompts, credentials, and signed media URLs. The same-origin capture
+diagnostic endpoint accepts only bounded, validated fields, never free-form error
+text. Container log retention is controlled by the deployment.
+
 ## Reporting a vulnerability
 
 Please do not open a public issue for a suspected vulnerability. Use a private

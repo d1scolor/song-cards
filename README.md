@@ -149,6 +149,21 @@ ASR and LLM services receive them and control their own retention. Job status
 contains stage timings for diagnosing delays, and expires when the app restarts
 or the bounded in-memory job history is pruned.
 
+For troubleshooting, open **Admin → System → Ask for a song → Recent voice
+activity**, reproduce the problem, then select **Refresh voice activity** and
+**Copy diagnostics**. This shows the last 20 requests since the server started,
+including microphone setup, transcription, selection, YouTube search/download,
+audio processing, speaker indexing, and playback. Failed steps include a fixed
+error code and an HTTP status when available. Desktop browser capture failures
+also report their setup phase in the browser console under `[voice.capture]`.
+
+The same server events appear with a `[voice]` prefix in **Portainer → Containers
+→ your Song Cards container → Logs**, or with
+`docker logs --since=10m --tail=200 <container-id>`. Docker Compose is not needed.
+Older images do not emit these diagnostics, so an empty container log does not
+mean that no requests reached the app. Recordings, transcripts, prompts, API keys,
+and signed download URLs are excluded from these diagnostic records.
+
 ## Local development
 
 Requirements:

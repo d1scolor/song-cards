@@ -15,6 +15,13 @@ import {
   type KioskPlaybackResult
 } from "@/lib/kiosk-playback";
 import type { Song } from "@/lib/types";
+import {
+  recordVoiceDiagnostic,
+  voiceFailure,
+  type VoiceDiagnosticPhase,
+  type VoiceDiagnosticDetails
+} from "@/lib/voice-diagnostics";
+import type { VoiceErrorCode } from "@/lib/voice-errors";
 
 type Stage =
   | "transcribing"
@@ -38,6 +45,12 @@ type Job = {
   timings: { stage: Stage; durationMs: number }[];
   stageStartedAt: number;
   timer?: NodeJS.Timeout;
+  diagnosticPhase?: VoiceDiagnosticPhase;
+  failure?: {
+    phase: VoiceDiagnosticPhase;
+    code: VoiceErrorCode;
+    httpStatus?: number;
+  };
 };
 declare global {
   var __songCardsVoiceJobs: Map<string, Job> | undefined;
@@ -67,6 +80,7 @@ export function publicVoiceJob(job: Job) {
     stage: job.stage,
     message: job.message,
     timings: job.timings,
+    ...(job.failure ? { failure: job.failure } : {}),
     ...(job.song ? { title: job.song.title } : {})
   };
 }
@@ -90,6 +104,11 @@ export async function cancelVoiceJob(id: string) {
   // Wait for an in-flight speaker command before allowing the next scan.
   await job.playback?.catch(() => undefined);
   stage(job, "cancelled", "Request cancelled.");
+  recordVoiceDiagnostic(
+    job.id,
+    job.diagnosticPhase ?? "selection",
+    "cancelled"
+  );
 }
 
 export async function cancelAllVoiceJobs() {
@@ -139,10 +158,29 @@ export function startVoiceJob(
   job.timer.unref();
   void (async () => {
     const signal = job.controller.signal;
+    let phase: VoiceDiagnosticPhase = "transcription";
+    let phaseStartedAt = Date.now();
+    const begin = (
+      next: VoiceDiagnosticPhase,
+      details: VoiceDiagnosticDetails = {}
+    ) => {
+      phase = next;
+      job.diagnosticPhase = next;
+      phaseStartedAt = Date.now();
+      recordVoiceDiagnostic(job.id, phase, "start", details);
+    };
+    const complete = (details: VoiceDiagnosticDetails = {}) =>
+      recordVoiceDiagnostic(job.id, phase, "complete", {
+        durationMs: Date.now() - phaseStartedAt,
+        ...details
+      });
     try {
+      begin("transcription");
       const transcript = await transcribeVoice(audio, settings, signal);
+      complete();
       signal.throwIfAborted();
       if (!transcript) {
+        recordVoiceDiagnostic(job.id, "transcription", "declined");
         stage(job, "declined", "I didn't hear a request. Please try again.");
         return;
       }
@@ -154,43 +192,96 @@ export function startVoiceJob(
         language: settings.language,
         systemPrompt: settings.systemPrompt,
         signal,
-        complete: (messages, tools, requestSignal) =>
-          completeVoice(settings, messages, tools, requestSignal),
-        searchLibrary: async (query) =>
-          searchVoiceSongs(query).map((song) => ({
-            source: "library",
+        complete: async (messages, tools, requestSignal) => {
+          begin("selection");
+          const result = await completeVoice(
+            settings,
+            messages,
+            tools,
+            requestSignal
+          );
+          complete();
+          return result;
+        },
+        searchLibrary: async (query) => {
+          begin("library_search");
+          const results = searchVoiceSongs(query).map((song) => ({
+            source: "library" as const,
             songId: song.id,
             title: song.title,
             artist: song.artist,
             durationMs: song.durationMs
-          })),
+          }));
+          complete({ resultCount: results.length });
+          return results;
+        },
         libraryHints: voiceLibraryHints,
-        searchYoutube: (query, requestSignal, scope) =>
-          searchVoiceYoutube(query, settings, requestSignal, scope),
+        searchYoutube: async (query, requestSignal, scope) => {
+          begin("youtube_search", { scope });
+          const results = await searchVoiceYoutube(
+            query,
+            settings,
+            requestSignal,
+            scope
+          );
+          complete({ scope, resultCount: results.length });
+          return results;
+        },
+        onInvalidAction: () =>
+          recordVoiceDiagnostic(job.id, "selection", "invalid_action", {
+            code: "invalid_model_action"
+          }),
         onSearch: () => stage(job, "searching", "Searching for your song…"),
         onDecision: () => stage(job, "deciding", "Choosing a song…")
       });
       signal.throwIfAborted();
       if ("reason" in decision) {
+        recordVoiceDiagnostic(job.id, "selection", "declined");
         stage(job, "declined", decision.reason);
         return;
       }
       stage(job, "preparing", "Getting your song ready…");
       const candidate = decision.candidate;
+      recordVoiceDiagnostic(job.id, "selection", "complete", {
+        source: candidate.source,
+        ...(candidate.source === "youtube"
+          ? { videoId: candidate.videoId }
+          : {})
+      });
+      if (candidate.source === "youtube")
+        begin("download", { videoId: candidate.videoId });
       const song =
         candidate.source === "library"
           ? findSongById(candidate.songId)
-          : await prepareVoiceYoutube(candidate, settings, signal);
+          : await prepareVoiceYoutube(candidate, settings, signal, (next) => {
+              if (phase !== next) {
+                complete();
+                begin(next, { videoId: candidate.videoId });
+              }
+            });
+      if (candidate.source === "youtube") complete();
       signal.throwIfAborted();
       if (!song) throw new Error("The selected song is no longer available.");
       touchVoiceCachedSong(song.id);
-      if (getPlaybackSettings().kioskPlaybackTarget === "owntone")
+      if (getPlaybackSettings().kioskPlaybackTarget === "owntone") {
+        begin("speaker_indexing");
         await waitForOwnToneSong(song, signal);
+        complete();
+      }
       signal.throwIfAborted();
       job.song = song;
       // Playback is committed by a separate client request, never by a late model reply.
       stage(job, "ready", `${song.title} is ready.`);
-    } catch {
+    } catch (error) {
+      if (!signal.aborted) {
+        const failure = voiceFailure(error);
+        job.failure = {
+          phase,
+          code: failure.code,
+          ...(failure.httpStatus ? { httpStatus: failure.httpStatus } : {})
+        };
+        recordVoiceDiagnostic(job.id, phase, "failed", job.failure);
+      }
       if (!terminal.has(job.stage))
         stage(
           job,
@@ -222,13 +313,34 @@ export async function playVoiceJob(id: string) {
   }
   job.controller.signal.throwIfAborted();
   stage(job, "starting", "Starting your song…");
+  recordVoiceDiagnostic(job.id, "playback", "start");
   job.playback = startKioskPlayback(job.song, undefined, job.controller.signal);
   try {
     const result = await job.playback;
     job.controller.signal.throwIfAborted();
     stage(job, "complete", `${job.song.title} is playing!`);
+    recordVoiceDiagnostic(
+      job.id,
+      "playback",
+      "complete",
+      "player" in result && result.player
+        ? {
+            playerState: result.player.state,
+            connected: result.player.connected
+          }
+        : {}
+    );
     return result;
-  } catch {
+  } catch (error) {
+    if (!job.controller.signal.aborted) {
+      const failure = voiceFailure(error);
+      job.failure = {
+        phase: "playback",
+        code: failure.code,
+        ...(failure.httpStatus ? { httpStatus: failure.httpStatus } : {})
+      };
+      recordVoiceDiagnostic(job.id, "playback", "failed", job.failure);
+    }
     if (!terminal.has(job.stage))
       stage(job, "error", "Playback could not be started. Please try again.");
     throw new Error("Playback could not be started. Please try again.");

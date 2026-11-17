@@ -130,6 +130,7 @@ export async function runVoiceAgent(input: {
   ) => Promise<VoiceCandidate[]>;
   onSearch?: () => void;
   onDecision?: () => void;
+  onInvalidAction?: () => void;
 }): Promise<AgentDecision> {
   const messages: AgentMessage[] = [
     {
@@ -179,6 +180,7 @@ export async function runVoiceAgent(input: {
     signal.throwIfAborted();
     const parsed = messageSchema.safeParse(raw);
     if (!parsed.success) {
+      input.onInvalidAction?.();
       // Some OpenAI-compatible servers ignore tool_choice. Repair within the
       // same four-turn budget; never display their conversational response.
       messages.push({
@@ -193,6 +195,7 @@ export async function runVoiceAgent(input: {
     try {
       args = JSON.parse(call.function.arguments);
     } catch {
+      input.onInvalidAction?.();
       return {
         reason: "I couldn't understand that request. Please try again."
       };
@@ -230,11 +233,13 @@ export async function runVoiceAgent(input: {
       const candidate = result.success
         ? candidates.get(result.data.candidateId)
         : undefined;
+      if (!candidate || !searchedLocal) input.onInvalidAction?.();
       return candidate && searchedLocal
         ? { candidate }
         : { reason: "I couldn't find that song. Please try again." };
     }
     if (turn === 3 || !["search_library", "search_youtube"].includes(name)) {
+      input.onInvalidAction?.();
       return { reason: "I couldn't choose a song. Please try again." };
     }
     const query = (
@@ -248,6 +253,7 @@ export async function runVoiceAgent(input: {
       !query.success ||
       (name === "search_youtube" && (!input.online || !searchedLocal))
     ) {
+      input.onInvalidAction?.();
       return { reason: "I couldn't find a suitable song. Please try again." };
     }
     messages.push({

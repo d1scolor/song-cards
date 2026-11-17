@@ -1028,6 +1028,10 @@ h2,
 .voice-settings button:disabled { opacity: .65; }
 .voice-settings .voice-prompt { font-family: ui-monospace, monospace; font-size: .9rem; line-height: 1.5; }
 .voice-settings .voice-prompt-reset { margin: 12px 0; }
+.voice-diagnostics { margin-top: 28px; padding-top: 20px; border-top: 1px solid #ddd2c2; }
+.voice-diagnostic-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.voice-diagnostic-actions button { padding: 12px 18px; }
+.voice-diagnostic-log { max-height: 420px; overflow: auto; padding: 16px; border-radius: 12px; color: #332c23; background: #f6f1e8; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .8rem; line-height: 1.6; }
 .voice-settings small { color: var(--muted); line-height: 1.5; }
 .voice-settings .voice-key-clear { display: flex; align-items: center; gap: 8px; font-size: .85rem; }
 .voice-key-clear input { width: 18px; height: 18px; }
