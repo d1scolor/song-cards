@@ -30,7 +30,8 @@ export const VoiceRequest = forwardRef<
   VoiceRequestHandle,
   {
     disabled: boolean;
-    beforeStart: () => Promise<void>;
+    beforeStart: (signal: AbortSignal) => Promise<void>;
+    onNoPlay: (signal: AbortSignal) => Promise<boolean>;
     onBusy: (busy: boolean) => void;
     onMessage: (message: string) => void;
     onPlayed: (
@@ -40,17 +41,23 @@ export const VoiceRequest = forwardRef<
     currentSong?: { title: string; artist: string };
   }
 >(function VoiceRequest(
-  { disabled, beforeStart, onBusy, onMessage, onPlayed, currentSong },
+  { disabled, beforeStart, onNoPlay, onBusy, onMessage, onPlayed, currentSong },
   ref
 ) {
   const active = useRef<Session | null>(null);
   const cancelling = useRef<Promise<void> | null>(null);
-  const callbacks = useRef({ beforeStart, onBusy, onMessage, onPlayed });
+  const callbacks = useRef({
+    beforeStart,
+    onNoPlay,
+    onBusy,
+    onMessage,
+    onPlayed
+  });
   const [phase, setPhase] = useState<
     "idle" | "opening" | "listening" | "working"
   >("idle");
   useEffect(() => {
-    callbacks.current = { beforeStart, onBusy, onMessage, onPlayed };
+    callbacks.current = { beforeStart, onNoPlay, onBusy, onMessage, onPlayed };
   });
 
   async function releaseMicrophone(session: Session) {
@@ -171,8 +178,19 @@ export const VoiceRequest = forwardRef<
           );
           break;
         }
-        if (["declined", "cancelled", "error"].includes(status.job.stage))
+        if (status.job.stage === "declined") {
+          const resumed = await withDeadline(
+            callbacks.current.onNoPlay(signal),
+            6000,
+            signal
+          ).catch(() => false);
+          if (active.current === session && resumed)
+            callbacks.current.onMessage(
+              `${status.job.message} Resuming your song.`
+            );
           break;
+        }
+        if (["cancelled", "error"].includes(status.job.stage)) break;
         await abortableDelay(500, signal);
       }
       if (active.current === session) await cancel();
@@ -222,7 +240,7 @@ export const VoiceRequest = forwardRef<
       const opening = Promise.all([
         openingStream,
         resumed,
-        callbacks.current.beforeStart()
+        callbacks.current.beforeStart(session.controller.signal)
       ]);
       const [stream] = await withDeadline(
         opening,

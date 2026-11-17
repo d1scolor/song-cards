@@ -140,6 +140,10 @@ loudness balancing. OwnTone must finish indexing new audio before it can play.
 
 One voice request runs at a time. Cancel, leave the kiosk, or start another card
 scan to abandon it; late model results do not automatically start playback.
+If the agent declines to play a song, playback resumes only when the same song
+was playing before recording and is still paused. Previously paused songs stay
+paused. Pausing an idle OwnTone speaker is a no-op, and a speaker pause failure
+does not block microphone capture.
 Recordings and transcripts are not retained by Song Cards. The configured
 ASR and LLM services receive them and control their own retention. Job status
 contains stage timings for diagnosing delays, and expires when the app restarts

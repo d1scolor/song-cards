@@ -22,6 +22,10 @@ import {
 } from "@/components/voice-request";
 import type { KioskPlaybackResult } from "@/lib/kiosk-playback";
 import type { PlayerStatus } from "@/lib/types";
+import {
+  pauseSpeakerForVoice,
+  resumeSpeakerAfterNoPlay
+} from "@/lib/voice-playback";
 
 type ScanStage =
   "idle" | "opening" | "scanning" | "starting" | "success" | "error";
@@ -43,6 +47,10 @@ export function Scanner({
   const localPlayer = useLocalPlayback();
   const voiceRef = useRef<VoiceRequestHandle>(null);
   const voiceBusyRef = useRef(false);
+  const pausedVoiceSongRef = useRef<{
+    target: "local" | "owntone";
+    songId: string;
+  } | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -431,20 +439,34 @@ export function Scanner({
             }
             onBusy={(busy) => {
               voiceBusyRef.current = busy;
+              if (!busy) pausedVoiceSongRef.current = null;
             }}
             onMessage={setMessage}
-            beforeStart={async () => {
-              void localPlayer.unlock();
-              localPlayer.pause();
+            beforeStart={async (signal) => {
+              void localPlayer.unlock().catch(() => undefined);
+              pausedVoiceSongRef.current =
+                playbackTarget === "local" &&
+                localPlayer.state === "play" &&
+                localPlayer.track
+                  ? { target: "local", songId: localPlayer.track.id }
+                  : null;
+              if (["play", "loading"].includes(localPlayer.state))
+                localPlayer.pause();
               setStage("idle");
-              const response = await fetch("/api/player/action", {
-                signal: AbortSignal.timeout(5000),
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({ action: "pause" })
-              });
-              if (!response.ok)
-                throw new Error("The speaker could not be paused.");
+              const previous = await pauseSpeakerForVoice(
+                playbackTarget,
+                signal
+              );
+              if (previous && !signal.aborted)
+                pausedVoiceSongRef.current = { target: "owntone", ...previous };
+            }}
+            onNoPlay={async (signal) => {
+              const previous = pausedVoiceSongRef.current;
+              pausedVoiceSongRef.current = null;
+              if (!previous || signal.aborted) return false;
+              return previous.target === "local"
+                ? localPlayer.resumeTrack(previous.songId, signal)
+                : resumeSpeakerAfterNoPlay(previous, signal);
             }}
             onPlayed={async (body: KioskPlaybackResult, signal) => {
               signal.throwIfAborted();

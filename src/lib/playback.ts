@@ -367,6 +367,11 @@ export async function playerAction(input: {
     return status;
   }
 
+  if (input.action === "pause") {
+    const current = await ownToneStatus();
+    if (!current.connected || current.state !== "play") return current;
+  }
+
   if (input.action === "volume") {
     const masterVolume = Math.max(
       0,

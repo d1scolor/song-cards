@@ -50,6 +50,7 @@ type LocalPlaybackContextValue = LocalPlaybackState & {
   playTrack: (track: LocalPlaybackTrack, signal?: AbortSignal) => Promise<void>;
   toggle: () => Promise<void>;
   pause: () => void;
+  resumeTrack: (songId: string, signal?: AbortSignal) => Promise<boolean>;
   stop: () => void;
   seek: (positionMs: number) => void;
   setMasterVolume: (volume: number) => void;
@@ -380,6 +381,42 @@ export function LocalPlaybackProvider({
     }
   }, [ensureAudioGraph]);
 
+  const resumeTrack = useCallback(
+    async (songId: string, signal?: AbortSignal) => {
+      const audio = audioRef.current;
+      if (
+        !audio ||
+        !audio.paused ||
+        trackRef.current?.id !== songId ||
+        signal?.aborted
+      )
+        return false;
+      try {
+        await ensureAudioGraph();
+        if (!audio.paused || trackRef.current?.id !== songId || signal?.aborted)
+          return false;
+        await withDeadline(
+          audio.play(),
+          5000,
+          signal,
+          "Tap play to resume your song."
+        );
+        return true;
+      } catch {
+        if (trackRef.current?.id === songId) {
+          audio.pause();
+          if (!signal?.aborted)
+            setPlayer((current) => ({
+              ...current,
+              error: "Tap play to resume your song."
+            }));
+        }
+        return false;
+      }
+    },
+    [ensureAudioGraph]
+  );
+
   const pause = useCallback(() => {
     audioRef.current?.pause();
     setPlayer((current) =>
@@ -431,13 +468,24 @@ export function LocalPlaybackProvider({
       ...player,
       unlock,
       pause,
+      resumeTrack,
       playTrack,
       toggle,
       stop,
       seek,
       setMasterVolume
     }),
-    [player, playTrack, seek, setMasterVolume, stop, toggle, unlock, pause]
+    [
+      player,
+      playTrack,
+      seek,
+      setMasterVolume,
+      stop,
+      toggle,
+      unlock,
+      pause,
+      resumeTrack
+    ]
   );
 
   return (
